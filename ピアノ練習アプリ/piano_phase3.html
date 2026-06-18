@@ -1,0 +1,1378 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ピアノコード練習 Phase 2</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f3; color: #1a1a1a; }
+#app { max-width: 960px; margin: 0 auto; padding: 1.5rem 1rem; }
+h1 { font-size: 20px; font-weight: 600; margin-bottom: 1.2rem; }
+
+#status-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 10px 16px; flex-wrap: wrap; }
+#midi-dot { width: 9px; height: 9px; border-radius: 50%; background: #aaa; flex-shrink: 0; transition: background 0.3s; }
+#midi-dot.on { background: #1D9E75; } #midi-dot.err { background: #E24B4A; }
+#midi-status { font-size: 13px; color: #666; }
+#pedal-badge { font-size: 11px; padding: 3px 10px; border-radius: 20px; background: #f0f0ee; border: 1px solid #ccc; color: #888; transition: all 0.15s; }
+#pedal-badge.on { background: #E1F5EE; border-color: #1D9E75; color: #085041; }
+#midi-btn { font-size: 12px; padding: 5px 12px; cursor: pointer; margin-left: auto; border: 1px solid #ccc; border-radius: 8px; background: #fff; }
+
+#tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.tab { padding: 8px 20px; border-radius: 8px; border: 1px solid #ddd; background: #fff; cursor: pointer; font-size: 14px; color: #666; transition: all 0.15s; }
+.tab.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+
+/* 設定パネル＋練習エリアを常時表示、設定は折りたたみ可能 */
+#settings-panel { background: #fff; border: 1px solid #ddd; border-radius: 12px; padding: 1.2rem; margin-bottom: 14px; }
+#settings-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+#settings-header h2 { font-size: 15px; font-weight: 600; }
+#settings-toggle { font-size: 13px; color: #888; }
+#settings-body { margin-top: 12px; }
+.setting-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.setting-row label { font-size: 13px; color: #555; min-width: 110px; }
+.setting-row select { font-size: 13px; padding: 5px 10px; border: 1px solid #ccc; border-radius: 7px; background: #fff; cursor: pointer; }
+.toggle-group { display: flex; gap: 6px; flex-wrap: wrap; }
+.tgl { padding: 5px 14px; border: 1px solid #ccc; border-radius: 20px; font-size: 13px; cursor: pointer; background: #fff; color: #555; transition: all 0.12s; user-select: none; position: relative; }
+.tgl.on { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+.tgl[data-tip]:hover::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); background: #333; color: #fff; font-size: 12px; white-space: pre; padding: 6px 10px; border-radius: 7px; pointer-events: none; z-index: 100; line-height: 1.6; }
+.tgl[data-tip]:hover::before { content: ''; position: absolute; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%); border: 5px solid transparent; border-top-color: #333; pointer-events: none; z-index: 100; }
+#start-btn { margin-top: 10px; padding: 10px 28px; background: #1a1a1a; color: #fff; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+#start-btn:hover { opacity: 0.8; }
+
+/* スコア */
+#score-row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.score-box { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 10px 18px; text-align: center; min-width: 72px; }
+.score-box .num { font-size: 22px; font-weight: 700; }
+.score-box .lbl { font-size: 11px; color: #888; margin-top: 2px; }
+
+/* コード表示 */
+#chord-display { background: #fff; border: 1px solid #ddd; border-radius: 14px; padding: 1.5rem; margin-bottom: 10px; text-align: center; position: relative; overflow: hidden; min-height: 130px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+#chord-name { font-size: 64px; font-weight: 800; letter-spacing: -1px; color: #1a1a1a; line-height: 1; }
+#chord-sub  { font-size: 15px; color: #888; margin-top: 6px; min-height: 22px; }
+#chord-hint-text { font-size: 13px; color: #C08010; margin-top: 4px; min-height: 20px; }
+#feedback { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-size: 52px; opacity: 0; pointer-events: none; transition: opacity 0.15s; border-radius: 14px; }
+#feedback.ok  { background: rgba(29,158,117,0.08); }
+#feedback.ng  { background: rgba(226,75,74,0.08); }
+
+/* タイマーバー：緑=正解待ち、赤=不正解待ち */
+#timer-bar-wrap { height: 5px; background: #eee; border-radius: 3px; margin-bottom: 12px; }
+#timer-bar { height: 5px; border-radius: 3px; width: 0%; transition: width 0.05s linear; }
+#timer-bar.correct { background: #1D9E75; }
+#timer-bar.wrong   { background: #E24B4A; }
+
+/* ピアノ */
+#piano-wrap { background: #fff; border: 1px solid #ddd; border-radius: 12px; padding: 1.2rem 1rem; margin-bottom: 12px; }
+#piano-scroll { overflow-x: auto; padding-bottom: 6px; }
+#piano { position: relative; user-select: none; }
+.wk { width: 28px; height: 108px; background: #fff; border-radius: 0 0 5px 5px; cursor: pointer; position: absolute; z-index: 1; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 5px; transition: background 0.06s; box-shadow: 0 0 0 2px #000; }
+.wk span { font-size: 10px; color: #bbb; pointer-events: none; }
+.wk.active { background: #B5D4F4 !important; }
+.wk.pedal  { background: #C8EFE0 !important; }
+.wk.hint      { background: #FFF3CD !important; }
+.wk.hint-root { background: #FFD0A0 !important; }
+.wk:hover:not(.active):not(.pedal):not(.hint):not(.hint-root) { background: #f5f5f5; }
+.bk { width: 17px; height: 68px; background: #222; border-radius: 0 0 4px 4px; cursor: pointer; position: absolute; z-index: 2; top: 0; transition: background 0.06s; box-shadow: 0 0 0 2px #000; }
+.bk.active { background: #378ADD !important; }
+.bk.pedal  { background: #1D9E75 !important; }
+.bk.hint      { background: #FFF3CD !important; }
+.bk.hint-root { background: #FFD0A0 !important; }
+.bk:hover:not(.active):not(.pedal):not(.hint) { background: #444; }
+
+#note-row { min-height: 32px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.npill { background: #E6F1FB; color: #0C447C; padding: 3px 12px; border-radius: 20px; font-size: 13px; font-weight: 500; }
+.npill.pedal { background: #E1F5EE; color: #085041; }
+
+#controls-row { display: flex; align-items: center; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+#controls-row label { font-size: 13px; color: #666; }
+#vol { width: 100px; }
+#vol-val { font-size: 13px; font-weight: 500; }
+#hint-btn { padding: 6px 14px; border: 1px solid #ccc; border-radius: 8px; background: #fff; font-size: 13px; cursor: pointer; }
+#hint-btn:hover { background: #fffbea; border-color: #D4A017; color: #A07010; }
+#stop-btn { margin-left: auto; padding: 6px 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; font-size: 13px; cursor: pointer; }
+#stop-btn:hover { background: #fee; border-color: #E24B4A; color: #E24B4A; }
+
+#practice-area { display: none; }
+
+/* ========== Phase 3: コード進行 ========== */
+.prog-settings { background: #fff; border: 1px solid #ddd; border-radius: 12px; padding: 1.2rem; margin-bottom: 14px; }
+.prog-grid-wrap { background: #fff; border: 1px solid #ddd; border-radius: 12px; padding: 1.2rem; margin-bottom: 14px; overflow-x: auto; }
+.prog-grid { border-collapse: collapse; }
+.prog-grid th { font-size: 12px; color: #888; padding: 5px 8px; border: 1px solid #e0e0e0; background: #f9f9f9; font-weight: 500; white-space: nowrap; }
+.prog-grid td.measure-num { font-size: 12px; color: #888; padding: 5px 10px; border: 1px solid #e0e0e0; background: #f9f9f9; font-weight: 500; white-space: nowrap; }
+.prog-grid td.beat-cell { width: 80px; min-width: 70px; height: 52px; border: 1px solid #e0e0e0; cursor: pointer; text-align: center; vertical-align: middle; font-size: 13px; transition: background 0.1s; }
+.prog-grid td.beat-cell:hover { background: #f0f4ff; }
+.prog-grid td.beat-cell.has-chord { font-weight: 700; color: #1a1a1a; background: #f0f8f4; }
+.prog-grid td.beat-cell.cont-cell { color: #bbb; font-size: 16px; }
+.prog-grid td.beat-cell.active-beat { background: #1D9E75 !important; color: #fff !important; font-weight: 700; }
+.prog-grid td.beat-cell.active-wrong { background: #E24B4A !important; color: #fff !important; font-weight: 700; }
+#cell-editor { display: none; position: fixed; background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.18); z-index: 200; min-width: 230px; }
+#prog-chord-display { background: #fff; border: 1px solid #ddd; border-radius: 14px; padding: 1.5rem; margin-bottom: 10px; text-align: center; position: relative; overflow: hidden; min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+#prog-chord-name { font-size: 64px; font-weight: 800; letter-spacing: -1px; color: #1a1a1a; line-height: 1; }
+#prog-chord-sub { font-size: 15px; color: #888; margin-top: 6px; }
+#prog-feedback { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-size: 52px; opacity: 0; pointer-events: none; transition: opacity 0.15s; border-radius: 14px; }
+#prog-feedback.ok { background: rgba(29,158,117,0.08); }
+#prog-feedback.ng { background: rgba(226,75,74,0.08); }
+#prog-beat-bar-wrap { height: 5px; background: #eee; border-radius: 3px; margin-bottom: 12px; }
+#prog-beat-bar { height: 5px; border-radius: 3px; width: 0%; background: #1D9E75; }
+#prog-beat-bar.wrong { background: #E24B4A; }
+#shared-piano { display: none; }
+.prog-btn { padding: 6px 14px; border: 1px solid #ccc; border-radius: 8px; background: #fff; font-size: 13px; cursor: pointer; }
+.prog-btn:hover { background: #f5f5f5; }
+.prog-btn.primary { background: #1a1a1a; color: #fff; border-color: #1a1a1a; font-weight: 600; }
+.prog-btn.primary:hover { opacity: 0.8; }
+.prog-btn.danger:hover { background: #fee; border-color: #E24B4A; color: #E24B4A; }
+#flash-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>ピアノコード練習アプリ</h1>
+
+  <div id="status-bar">
+    <span id="midi-dot"></span>
+    <span id="midi-status">MIDIを検索中...</span>
+    <span id="pedal-badge">ペダル OFF</span>
+    <button id="midi-btn" onclick="connectMidi()">MIDIキーボード接続</button>
+  </div>
+
+  <div id="tabs">
+    <div class="tab active" onclick="switchTab('flash')">🃏 フラッシュカード</div>
+    <div class="tab" onclick="switchTab('prog')">🎵 コード進行</div>
+  </div>
+
+  <!-- 設定パネル（折りたたみ式） -->
+  <div id="settings-panel">
+    <div id="settings-header" onclick="toggleSettings()">
+      <h2>⚙️ 練習設定</h2>
+      <span id="settings-toggle">▲ 閉じる</span>
+    </div>
+    <div id="settings-body">
+      <div class="setting-row" style="margin-top:12px">
+        <label>出題方式</label>
+        <div class="toggle-group">
+          <div class="tgl on" id="tgl-random" onclick="setMode('random')">完全ランダム</div>
+          <div class="tgl" id="tgl-key" onclick="setMode('key')">キー指定</div>
+        </div>
+      </div>
+      <div class="setting-row" id="row-key" style="display:none">
+        <label>キー</label>
+        <select id="sel-key">
+          <option>C</option><option>C#</option><option>D</option><option>D#</option>
+          <option>E</option><option>F</option><option>F#</option><option>G</option>
+          <option>G#</option><option>A</option><option>A#</option><option>B</option>
+        </select>
+        <select id="sel-scale">
+          <option value="major">長調（Major）</option>
+          <option value="minor">短調（Minor）</option>
+        </select>
+      </div>
+      <div class="setting-row" id="row-keymode" style="display:none">
+        <label>出題範囲</label>
+        <div class="toggle-group">
+          <div class="tgl on" id="tgl-km-diatonic" onclick="setKeyMode('diatonic')" data-tip="そのキーで自然に発生するコードのみ出題&#10;例）Cメジャー → C, Dm, Em, F, G, Am, Bdim">ダイアトニック</div>
+          <div class="tgl"    id="tgl-km-free"     onclick="setKeyMode('free')"     data-tip="スケール音をルートにチェックしたコード種を全組み合わせで出題&#10;aug, dim, sus4 なども全ルートで出る">自由</div>
+        </div>
+      </div>
+      <div class="setting-row" style="align-items:flex-start">
+        <label style="padding-top:4px">出題コード</label>
+        <div>
+          <div style="font-size:11px;color:#999;margin-bottom:4px">三和音</div>
+          <div class="toggle-group" style="margin-bottom:8px">
+            <div class="tgl on" id="tgl-ct-maj"  onclick="toggleChordType('maj')">メジャー</div>
+            <div class="tgl on" id="tgl-ct-m"    onclick="toggleChordType('m')">マイナー</div>
+            <div class="tgl"   id="tgl-ct-dim"   onclick="toggleChordType('dim')">dim</div>
+            <div class="tgl"   id="tgl-ct-aug"   onclick="toggleChordType('aug')">aug</div>
+            <div class="tgl"   id="tgl-ct-sus4"  onclick="toggleChordType('sus4')">sus4</div>
+          </div>
+          <div style="font-size:11px;color:#999;margin-bottom:4px">7th系</div>
+          <div class="toggle-group">
+            <div class="tgl" id="tgl-ct-7"    onclick="toggleChordType('7')">7</div>
+            <div class="tgl" id="tgl-ct-M7"   onclick="toggleChordType('M7')">M7</div>
+            <div class="tgl" id="tgl-ct-m7"   onclick="toggleChordType('m7')">m7</div>
+            <div class="tgl" id="tgl-ct-mM7"  onclick="toggleChordType('mM7')">mM7</div>
+            <div class="tgl" id="tgl-ct-dim7" onclick="toggleChordType('dim7')">dim7</div>
+            <div class="tgl" id="tgl-ct-m7b5" onclick="toggleChordType('m7b5')">m7♭5</div>
+          </div>
+        </div>
+      </div>
+      <div class="setting-row">
+        <label>5th省略</label>
+        <div class="toggle-group">
+          <div class="tgl on" id="tgl-5-off" onclick="set5th(false)">不可</div>
+          <div class="tgl"    id="tgl-5-on"  onclick="set5th(true)">可</div>
+        </div>
+      </div>
+      <div class="setting-row">
+        <label>判定時間</label>
+        <input type="range" id="sel-timer" min="0.1" max="1" step="0.1" value="1" style="width:120px">
+        <span id="timer-val">1.0秒</span>
+      </div>
+      <button id="start-btn" onclick="startPractice()">練習スタート ▶</button>
+    </div>
+  </div>
+
+  <!-- フラッシュカード練習エリア -->
+  <div id="practice-area">
+    <div id="score-row">
+      <div class="score-box"><div class="num" id="sc-correct">0</div><div class="lbl">正解</div></div>
+      <div class="score-box"><div class="num" id="sc-wrong">0</div><div class="lbl">不正解</div></div>
+      <div class="score-box"><div class="num" id="sc-rate">-</div><div class="lbl">正解率</div></div>
+      <div class="score-box"><div class="num" id="sc-streak">0</div><div class="lbl">連続正解</div></div>
+      <div class="score-box"><div class="num" id="sc-pass">0</div><div class="lbl">パス</div></div>
+    </div>
+    <div id="chord-display">
+      <div id="chord-name">-</div>
+      <div id="chord-sub"></div>
+      <div id="chord-hint-text"></div>
+      <div id="feedback"></div>
+    </div>
+    <div id="timer-bar-wrap"><div id="timer-bar" class="correct"></div></div>
+    <div id="flash-controls">
+      <button id="hint-btn" onclick="showHint()">💡 ヒント</button>
+      <button id="pass-btn" onclick="passChord()">⏭ パス</button>
+      <button id="stop-btn" onclick="stopPractice()" style="margin-left:auto">■ 終了</button>
+    </div>
+  </div>
+
+  <!-- Phase 3: コード進行エリア -->
+  <div id="prog-area" style="display:none">
+    <!-- 設定 -->
+    <div class="prog-settings">
+      <div class="setting-row">
+        <label>コード進行</label>
+        <select id="prog-select" onchange="onProgSelectChange()" style="font-size:13px;padding:5px 10px;border:1px solid #ccc;border-radius:7px;max-width:260px"></select>
+        <button class="prog-btn danger" id="prog-delete-btn" onclick="deleteCustomProg()" style="display:none">削除</button>
+      </div>
+      <div class="setting-row" id="prog-custom-name-row" style="display:none">
+        <label>名前</label>
+        <input type="text" id="prog-custom-name-input" value="カスタム進行" style="font-size:13px;padding:5px 10px;border:1px solid #ccc;border-radius:7px;width:200px">
+      </div>
+      <div class="setting-row">
+        <label>テンポモード</label>
+        <div class="toggle-group">
+          <div class="tgl on" id="tgl-tempo-metro" onclick="setTempoMode('metro')">メトロノーム</div>
+          <div class="tgl" id="tgl-tempo-free" onclick="setTempoMode('free')">自由</div>
+        </div>
+      </div>
+      <div class="setting-row" id="prog-bpm-row">
+        <label>BPM</label>
+        <button class="prog-btn" onclick="changeBpm(-5)">－</button>
+        <span id="prog-bpm-val" style="font-size:15px;font-weight:700;min-width:40px;text-align:center">80</span>
+        <button class="prog-btn" onclick="changeBpm(5)">＋</button>
+        <span style="font-size:12px;color:#888;margin-left:8px">自動: +<input type="number" id="prog-step-up" value="5" style="width:44px;font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:5px"> / −<input type="number" id="prog-step-down" value="10" style="width:44px;font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:5px"> BPM</span>
+        <span style="font-size:12px;color:#888;margin-left:4px">範囲: <input type="number" id="prog-min-bpm" value="40" style="width:44px;font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:5px">〜<input type="number" id="prog-max-bpm" value="200" style="width:50px;font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:5px"></span>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="prog-btn primary" id="prog-start-btn" onclick="startProgPractice()">練習スタート ▶</button>
+        <button class="prog-btn" id="prog-save-btn" onclick="saveCustomProg()" style="display:none">💾 保存</button>
+      </div>
+    </div>
+
+    <!-- グリッドエディタ -->
+    <div class="prog-grid-wrap">
+      <div id="prog-grid-toolbar" style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap"></div>
+      <div id="prog-grid-container"></div>
+    </div>
+
+    <!-- 練習中パネル -->
+    <div id="prog-practice-panel" style="display:none">
+      <div id="prog-chord-display">
+        <div id="prog-chord-name">-</div>
+        <div id="prog-chord-sub"></div>
+        <div id="prog-feedback"></div>
+      </div>
+      <div id="prog-beat-bar-wrap"><div id="prog-beat-bar"></div></div>
+      <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+        <div class="score-box"><div class="num" id="prog-sc-loop">0</div><div class="lbl">ループ</div></div>
+        <div class="score-box"><div class="num" id="prog-sc-correct">0</div><div class="lbl">正解</div></div>
+        <div class="score-box"><div class="num" id="prog-sc-wrong">0</div><div class="lbl">不正解</div></div>
+        <div class="score-box" id="prog-bpm-box" style="display:none"><div class="num" id="prog-sc-bpm">80</div><div class="lbl">BPM</div></div>
+        <button class="prog-btn danger" onclick="stopProgPractice()" style="margin-left:auto">■ 終了</button>
+      </div>
+    </div>
+
+    <!-- 結果画面 -->
+    <div id="prog-result" style="display:none;background:#fff;border:1px solid #ddd;border-radius:12px;padding:1.5rem;margin-bottom:14px">
+      <h3 style="font-size:16px;font-weight:600;margin-bottom:12px">📊 練習結果</h3>
+      <div id="prog-result-content"></div>
+      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+        <button class="prog-btn primary" onclick="progRestartLoop()">最初からループ</button>
+        <button class="prog-btn" id="prog-weak-btn" onclick="progWeakpointPractice()" style="display:none">弱点練習 →フラッシュカード</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- セルエディタ（fixed overlay） -->
+  <div id="cell-editor">
+    <div style="font-size:13px;font-weight:600;margin-bottom:8px" id="cell-editor-title">小節1 拍1</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <select id="cell-root" style="font-size:13px;padding:5px;border:1px solid #ccc;border-radius:6px">
+        <option value="0">C</option><option value="1">C#/D♭</option><option value="2">D</option>
+        <option value="3">D#/E♭</option><option value="4">E</option><option value="5">F</option>
+        <option value="6">F#/G♭</option><option value="7">G</option><option value="8">G#/A♭</option>
+        <option value="9">A</option><option value="10">A#/B♭</option><option value="11">B</option>
+      </select>
+      <select id="cell-type" style="font-size:13px;padding:5px;border:1px solid #ccc;border-radius:6px">
+        <option value="maj">メジャー</option><option value="m">マイナー</option>
+        <option value="7">7</option><option value="M7">M7</option><option value="m7">m7</option>
+        <option value="dim">dim</option><option value="aug">aug</option><option value="sus4">sus4</option>
+        <option value="mM7">mM7</option><option value="dim7">dim7</option><option value="m7b5">m7♭5</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="prog-btn primary" onclick="confirmCellEdit()">確定</button>
+      <button class="prog-btn" onclick="clearCell()">クリア</button>
+      <button class="prog-btn" onclick="closeCellEditor()" style="margin-left:auto">✕</button>
+    </div>
+  </div>
+
+  <!-- 共有ピアノ（両モード共用） -->
+  <div id="shared-piano">
+    <div id="piano-wrap">
+      <div id="piano-scroll"><div id="piano" style="height:120px"></div></div>
+      <div id="note-row"></div>
+      <div id="controls-row">
+        <label>音量</label>
+        <input type="range" id="vol" min="0" max="100" value="70">
+        <span id="vol-val">70</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const NOTE_NAMES  = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const NOTE_FLATS  = ['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
+function rootName(pc) {
+  return Math.random() < 0.5 ? NOTE_NAMES[pc] : NOTE_FLATS[pc];
+}
+const BLACK_SET  = new Set([1,3,6,8,10]);
+const WK_W = 28, BK_W = 17, START = 36, END = 84;
+
+const CHORD_TYPES = {
+  'maj':  { label: '',      required: [0,4,7],    optional: [],   fifth: 7 },
+  'm':    { label: 'm',     required: [0,3,7],    optional: [],   fifth: 7 },
+  '7':    { label: '7',     required: [0,4,10],   optional: [7],  fifth: 7 },
+  'M7':   { label: 'M7',   required: [0,4,11],   optional: [7],  fifth: 7 },
+  'm7':   { label: 'm7',   required: [0,3,10],   optional: [7],  fifth: 7 },
+  'dim':  { label: 'dim',  required: [0,3,6],    optional: [],   fifth: null },
+  'aug':  { label: 'aug',  required: [0,4,8],    optional: [],   fifth: null },
+  'sus4': { label: 'sus4', required: [0,5,7],    optional: [],   fifth: null },
+  'mM7':  { label: 'mM7',  required: [0,3,11],   optional: [7],  fifth: 7 },
+  'dim7': { label: 'dim7', required: [0,3,6,9],  optional: [],   fifth: null },
+  'm7b5': { label: 'm7♭5', required: [0,3,6,10], optional: [],   fifth: null },
+};
+
+const SCALE_ROOTS = {
+  major: [0, 2, 4, 5, 7, 9, 11],
+  minor: [0, 2, 3, 5, 7, 8, 10],
+};
+const MAJOR_DIATONIC   = [[0,'maj'],[2,'m'],[4,'m'],[5,'maj'],[7,'maj'],[9,'m'],[11,'dim']];
+const MAJOR_DIATONIC_7 = [[0,'M7'],[2,'m7'],[4,'m7'],[5,'M7'],[7,'7'],[9,'m7'],[11,'m7b5']];
+const MINOR_DIATONIC   = [[0,'m'],[2,'dim'],[3,'maj'],[5,'m'],[7,'m'],[8,'maj'],[10,'maj']];
+const MINOR_DIATONIC_7 = [[0,'m7'],[2,'m7b5'],[3,'M7'],[5,'m7'],[7,'m7'],[8,'M7'],[10,'7']];
+
+const ALL_ROOTS = [0,1,2,3,4,5,6,7,8,9,10,11];
+let selectedChordTypes = new Set(['maj','m']);
+
+let settings = { mode:'random', key:0, scale:'major', keyMode:'diatonic', fifth:false, timerSec:1.0 };
+let practiceRunning = false;
+let currentChord = null;
+let scoreCorrect=0, scoreWrong=0, scoreStreak=0, scorePass=0;
+let timerRAF = null;
+let timerState = null; // 'correct' | 'wrong' | null
+let judgingLocked = false; // 判定後の次問までロック
+let settingsOpen = true;
+let pool = [];
+
+// ===================== 設定UI =====================
+function toggleSettings() {
+  settingsOpen = !settingsOpen;
+  document.getElementById('settings-body').style.display = settingsOpen ? 'block' : 'none';
+  document.getElementById('settings-toggle').textContent = settingsOpen ? '▲ 閉じる' : '▼ 開く';
+}
+function setMode(m) {
+  settings.mode = m;
+  ['random','key'].forEach(k => document.getElementById('tgl-'+k).classList.toggle('on', k===m));
+  document.getElementById('row-key').style.display     = m==='key' ? 'flex' : 'none';
+  document.getElementById('row-keymode').style.display = m==='key' ? 'flex' : 'none';
+  if (practiceRunning) rebuildPool();
+}
+function setKeyMode(km) {
+  settings.keyMode = km;
+  ['diatonic','free'].forEach(k => document.getElementById('tgl-km-'+k).classList.toggle('on', k===km));
+  if (practiceRunning) rebuildPool();
+}
+function toggleChordType(t) {
+  if (selectedChordTypes.has(t)) {
+    if (selectedChordTypes.size === 1) return; // 最低1つは選択
+    selectedChordTypes.delete(t);
+  } else {
+    selectedChordTypes.add(t);
+  }
+  document.getElementById('tgl-ct-'+t).classList.toggle('on', selectedChordTypes.has(t));
+  if (practiceRunning) rebuildPool();
+}
+function set5th(v) {
+  settings.fifth = v;
+  document.getElementById('tgl-5-on').classList.toggle('on', v);
+  document.getElementById('tgl-5-off').classList.toggle('on', !v);
+}
+
+// ===================== プール構築 =====================
+function buildPool() {
+  const p = [];
+  if (settings.mode === 'random') {
+    ALL_ROOTS.forEach(r => selectedChordTypes.forEach(t => p.push({root:r,type:t})));
+  } else {
+    const keyRoot = NOTE_NAMES.indexOf(document.getElementById('sel-key').value);
+    settings.key = keyRoot;
+    settings.scale = document.getElementById('sel-scale').value;
+    if (settings.keyMode === 'diatonic') {
+      const base = settings.scale === 'major'
+        ? [...MAJOR_DIATONIC, ...MAJOR_DIATONIC_7]
+        : [...MINOR_DIATONIC, ...MINOR_DIATONIC_7];
+      base.forEach(([off,t]) => { if (selectedChordTypes.has(t)) p.push({root:(keyRoot+off)%12, type:t}); });
+    } else {
+      const roots = SCALE_ROOTS[settings.scale].map(off => (keyRoot + off) % 12);
+      roots.forEach(r => selectedChordTypes.forEach(t => p.push({root:r, type:t})));
+    }
+  }
+  return p;
+}
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+let deckIndex = 0;
+function rebuildPool() {
+  pool = shuffle(buildPool());
+  deckIndex = 0;
+}
+
+// ===================== 判定 =====================
+function checkChord(pressedSet, chord) {
+  const def = CHORD_TYPES[chord.type];
+  const required = def.required.map(i => (chord.root+i)%12);
+  const optional = def.optional.map(i => (chord.root+i)%12);
+
+  let effRequired = [...required];
+  if (def.fifth !== null) {
+    const fifth = (chord.root + def.fifth) % 12;
+    if (settings.fifth) {
+      // 省略OK: requiredにあれば外す
+      effRequired = effRequired.filter(n => n !== fifth);
+    } else {
+      // 省略不可: optionalにある場合もrequiredに追加
+      if (!effRequired.includes(fifth)) effRequired.push(fifth);
+    }
+  }
+
+  // 必須音が全部揃っているか
+  if (!effRequired.every(n => pressedSet.has(n))) return 'none';
+
+  // 余分な音がないか
+  const allowed = new Set([...required, ...optional]);
+  if ([...pressedSet].some(n => !allowed.has(n))) return 'wrong';
+
+  return 'correct';
+}
+
+// ===================== タイマー =====================
+function startTimer(state) {
+  clearTimer();
+  timerState = state;
+  const bar = document.getElementById('timer-bar');
+  bar.className = state;
+  const duration = settings.timerSec * 1000;
+  const start = performance.now();
+  function tick() {
+    const pct = Math.min((performance.now()-start)/duration*100, 100);
+    bar.style.width = pct + '%';
+    if (pct >= 100) { onJudge(state === 'correct'); }
+    else { timerRAF = requestAnimationFrame(tick); }
+  }
+  timerRAF = requestAnimationFrame(tick);
+}
+function clearTimer() {
+  if (timerRAF) { cancelAnimationFrame(timerRAF); timerRAF = null; }
+  document.getElementById('timer-bar').style.width = '0%';
+  timerState = null;
+}
+
+// ===================== 練習フロー =====================
+function startPractice() {
+  settings.timerSec = parseFloat(document.getElementById('sel-timer').value);
+  pool = shuffle(buildPool());
+  deckIndex = 0;
+  if (!pool.length) { alert('出題できるコードがありません'); return; }
+  scoreCorrect=0; scoreWrong=0; scoreStreak=0; scorePass=0;
+  practiceRunning = true;
+  judgingLocked = false;
+  updateScore();
+  document.getElementById('practice-area').style.display = 'block';
+  document.getElementById('shared-piano').style.display = 'block';
+  settingsOpen = false;
+  document.getElementById('settings-body').style.display = 'none';
+  document.getElementById('settings-toggle').textContent = '▼ 開く';
+  nextChord();
+}
+
+function stopPractice() {
+  practiceRunning = false;
+  judgingLocked = false;
+  clearTimer();
+  clearHints();
+  document.getElementById('practice-area').style.display = 'none';
+  if (!progRunning) document.getElementById('shared-piano').style.display = 'none';
+  currentChord = null;
+}
+
+function nextChord() {
+  clearTimer();
+  clearHints();
+  judgingLocked = false;
+  if (deckIndex >= pool.length) { pool = shuffle(pool); deckIndex = 0; }
+  currentChord = pool[deckIndex++];
+  const def = CHORD_TYPES[currentChord.type];
+  let notes = def.required.map(i => (currentChord.root+i)%12);
+  if (def.fifth !== null) {
+    const fifth = (currentChord.root + def.fifth) % 12;
+    if (settings.fifth) {
+      notes = notes.filter(n => n !== fifth);
+    } else {
+      if (!notes.includes(fifth)) notes.push(fifth);
+    }
+  }
+  document.getElementById('chord-name').textContent = rootName(currentChord.root) + def.label;
+  document.getElementById('chord-sub').textContent  = '構成音: ' + notes.map(n=>NOTE_NAMES[n]).join(' - ');
+  document.getElementById('chord-hint-text').textContent = '';
+  const fb = document.getElementById('feedback');
+  fb.style.opacity = '0'; fb.className = '';
+  document.getElementById('timer-bar').style.width = '0%';
+}
+
+function onJudge(correct) {
+  if (judgingLocked) return;
+  judgingLocked = true;
+  clearTimer();
+  if (correct) { scoreCorrect++; scoreStreak++; }
+  else         { scoreWrong++;   scoreStreak=0; }
+  updateScore();
+  const fb = document.getElementById('feedback');
+  fb.textContent = correct ? '✅' : '❌';
+  fb.className   = correct ? 'ok' : 'ng';
+  fb.style.opacity = '1';
+  setTimeout(() => { fb.style.opacity='0'; fb.className=''; }, 800);
+  setTimeout(() => { if (practiceRunning) nextChord(); }, 1000);
+}
+
+function updateScore() {
+  const total = scoreCorrect + scoreWrong;
+  document.getElementById('sc-correct').textContent = scoreCorrect;
+  document.getElementById('sc-wrong').textContent   = scoreWrong;
+  document.getElementById('sc-streak').textContent  = scoreStreak;
+  document.getElementById('sc-rate').textContent    = total ? Math.round(scoreCorrect/total*100)+'%' : '-';
+  document.getElementById('sc-pass').textContent    = scorePass;
+}
+
+function passChord() {
+  if (!practiceRunning || judgingLocked) return;
+  scorePass++;
+  scoreStreak = 0;
+  updateScore();
+  if (practiceRunning) nextChord();
+}
+
+// ===================== 押鍵チェック（毎回呼ぶ） =====================
+function checkCurrentChord() {
+  checkProgChord();
+  if (!practiceRunning || !currentChord || judgingLocked) return;
+
+  // ペダル保持音も含めた実効押鍵セット（ピッチクラス）
+  const pressed = new Set();
+  physPressed.forEach(m => pressed.add(m%12));
+  Object.keys(activeNodes).forEach(m => { if(activeNodes[m]?.sustaining) pressed.add(Number(m)%12); });
+
+  if (pressed.size === 0) { clearTimer(); return; }
+
+  const result = checkChord(pressed, currentChord);
+  if (result === 'correct') {
+    if (timerState !== 'correct') startTimer('correct');
+  } else if (result === 'wrong') {
+    // 必須音は揃っているが余分な音がある → 不正解タイマー
+    if (timerState !== 'wrong') startTimer('wrong');
+  } else {
+    // 必須音が揃っていない → タイマーリセット
+    clearTimer();
+  }
+}
+
+let hintOn = false;
+function showHint() {
+  if (!currentChord) return;
+  hintOn = !hintOn;
+  const btn = document.getElementById('hint-btn');
+  if (hintOn) {
+    const def = CHORD_TYPES[currentChord.type];
+    const root = currentChord.root;
+    const fifth = def.fifth !== null ? (root + def.fifth) % 12 : null;
+
+    // 表示する音を決定（省略可のとき5thは除外）
+    let notes = def.required.map(i => (root+i)%12);
+    if (fifth !== null) {
+      if (settings.fifth) {
+        // 省略可: 5thを除外
+        notes = notes.filter(n => n !== fifth);
+      } else {
+        // 省略不可: 5thが含まれていなければ追加
+        if (!notes.includes(fifth)) notes.push(fifth);
+      }
+    }
+
+    Object.entries(keyEls).forEach(([m, el]) => {
+      const pc = Number(m) % 12;
+      if (pc === root) {
+        el.classList.add('hint-root');
+      } else if (notes.includes(pc) && pc !== root) {
+        el.classList.add('hint');
+      }
+    });
+    document.getElementById('chord-hint-text').textContent = '💡 ' + notes.map(n => NOTE_NAMES[n]).join(' - ');
+    btn.textContent = '💡 ヒント OFF';
+  } else {
+    clearHints();
+    btn.textContent = '💡 ヒント';
+  }
+}
+function clearHints() {
+  hintOn = false;
+  Object.values(keyEls).forEach(el=>el.classList.remove('hint','hint-root'));
+  document.getElementById('chord-hint-text').textContent = '';
+  document.getElementById('hint-btn').textContent = '💡 ヒント';
+}
+
+// ===================== タブ切り替え =====================
+let activeTab = 'flash';
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach((el, i) => {
+    el.classList.toggle('active', (i===0 && tab==='flash') || (i===1 && tab==='prog'));
+  });
+  const isFlash = tab === 'flash';
+  document.getElementById('settings-panel').style.display = isFlash ? 'block' : 'none';
+  document.getElementById('practice-area').style.display  = (isFlash && practiceRunning) ? 'block' : 'none';
+  document.getElementById('prog-area').style.display      = isFlash ? 'none' : 'block';
+  document.getElementById('shared-piano').style.display   = (practiceRunning || progRunning) ? 'block' : 'none';
+  if (!isFlash) renderProgGrid();
+}
+
+// ===================== Phase 3: コード進行モード =====================
+const PROG_PRESETS = [
+  { name: 'カノン (Cメジャー)', beatsPerMeasure: 4, chords: [
+    {root:0,type:'maj'},null,null,null, {root:7,type:'maj'},null,null,null,
+    {root:9,type:'m'},null,null,null,   {root:4,type:'m'},null,null,null,
+    {root:5,type:'maj'},null,null,null, {root:0,type:'maj'},null,null,null,
+    {root:5,type:'maj'},null,null,null, {root:7,type:'maj'},null,null,null,
+  ]},
+  { name: 'J-POP王道 (Cメジャー)', beatsPerMeasure: 4, chords: [
+    {root:0,type:'maj'},null,null,null, {root:7,type:'maj'},null,null,null,
+    {root:9,type:'m'},null,null,null,   {root:5,type:'maj'},null,null,null,
+  ]},
+  { name: '4-5-6-1 (Cメジャー)', beatsPerMeasure: 4, chords: [
+    {root:5,type:'maj'},null,null,null, {root:7,type:'maj'},null,null,null,
+    {root:9,type:'m'},null,null,null,   {root:0,type:'maj'},null,null,null,
+  ]},
+  { name: 'ポップ進行 (Cメジャー)', beatsPerMeasure: 4, chords: [
+    {root:5,type:'maj'},null,null,null, {root:7,type:'maj'},null,null,null,
+    {root:4,type:'m'},null,null,null,   {root:9,type:'m'},null,null,null,
+  ]},
+  { name: '小室進行 (Aマイナー)', beatsPerMeasure: 4, chords: [
+    {root:9,type:'m'},null,null,null,   {root:5,type:'maj'},null,null,null,
+    {root:7,type:'maj'},null,null,null, {root:0,type:'maj'},null,null,null,
+  ]},
+  { name: 'vi-IV-I-V (Cメジャー)', beatsPerMeasure: 4, chords: [
+    {root:9,type:'m'},null,null,null,   {root:5,type:'maj'},null,null,null,
+    {root:0,type:'maj'},null,null,null, {root:7,type:'maj'},null,null,null,
+  ]},
+  { name: 'ロック (Aマイナー)', beatsPerMeasure: 4, chords: [
+    {root:9,type:'m'},null,null,null,   {root:7,type:'maj'},null,null,null,
+    {root:5,type:'maj'},null,null,null, {root:4,type:'maj'},null,null,null,
+  ]},
+  { name: 'ツーファイブワン (Cメジャー)', beatsPerMeasure: 4, chords: [
+    {root:2,type:'m7'},null,null,null,  {root:7,type:'7'},null,null,null,
+    {root:0,type:'M7'},null,null,null,  null,null,null,null,
+  ]},
+  { name: '3-6-2-5 (Cメジャー)', beatsPerMeasure: 4, chords: [
+    {root:4,type:'m7'},null,null,null,  {root:9,type:'m7'},null,null,null,
+    {root:2,type:'m7'},null,null,null,  {root:7,type:'7'},null,null,null,
+  ]},
+  { name: '12小節ブルース (C)', beatsPerMeasure: 4, chords: [
+    {root:0,type:'7'},null,null,null,   {root:5,type:'7'},null,null,null,
+    {root:0,type:'7'},null,null,null,   null,null,null,null,
+    {root:5,type:'7'},null,null,null,   null,null,null,null,
+    {root:0,type:'7'},null,null,null,   null,null,null,null,
+    {root:7,type:'7'},null,null,null,   {root:5,type:'7'},null,null,null,
+    {root:0,type:'7'},null,null,null,   {root:7,type:'7'},null,null,null,
+  ]},
+];
+
+let customProgs = [];
+let progEditDraft = null;
+let cellEditorSlot = null;
+let progRunning = false;
+let progPos = 0;
+let progLoopCount = 0;
+let progCorrectThisLoop = true;
+let progAllMistakes = new Map(); // slotIdx -> count
+let progTotalCorrect = 0;
+let progTotalWrong = 0;
+let progBpm = 80;
+let progMaxBpmReached = 80;
+let progTempoMode = 'metro';
+let progMetroTimer = null;
+let progBeatRAF = null;
+let progBeatStart = null;
+let progFreeRAF = null;
+let progFreeState = null; // 'correct' | 'wrong' | null
+let progJudgeLocked = false;
+let progMetroBeatCorrect = false;
+let progActiveProg = null; // deep-copy used during practice
+
+function loadCustomProgs() {
+  try { customProgs = JSON.parse(localStorage.getItem('piano_custom_progs') || '[]'); }
+  catch(e) { customProgs = []; }
+}
+
+function saveCustomProgsToLS() {
+  localStorage.setItem('piano_custom_progs', JSON.stringify(customProgs));
+}
+
+function updateProgSelect() {
+  const sel = document.getElementById('prog-select');
+  sel.innerHTML = '';
+  const pg = document.createElement('optgroup'); pg.label = 'プリセット';
+  PROG_PRESETS.forEach((p, i) => {
+    const o = document.createElement('option'); o.value = 'preset:'+i; o.textContent = p.name;
+    pg.appendChild(o);
+  });
+  sel.appendChild(pg);
+  if (customProgs.length > 0) {
+    const cg = document.createElement('optgroup'); cg.label = 'カスタム';
+    customProgs.forEach((p, i) => {
+      const o = document.createElement('option'); o.value = 'custom:'+i; o.textContent = p.name;
+      cg.appendChild(o);
+    });
+    sel.appendChild(cg);
+  }
+  const no = document.createElement('option'); no.value = 'new'; no.textContent = '＋ 新規作成';
+  sel.appendChild(no);
+}
+
+function getSelectedProgObj() {
+  const val = document.getElementById('prog-select').value;
+  if (val.startsWith('preset:')) return JSON.parse(JSON.stringify(PROG_PRESETS[+val.split(':')[1]]));
+  if (val.startsWith('custom:')) return JSON.parse(JSON.stringify(customProgs[+val.split(':')[1]]));
+  return null;
+}
+
+function onProgSelectChange() {
+  const val = document.getElementById('prog-select').value;
+  if (val === 'new') { startNewCustomProg(); return; }
+  progEditDraft = getSelectedProgObj();
+  document.getElementById('prog-delete-btn').style.display = val.startsWith('custom:') ? 'inline-block' : 'none';
+  document.getElementById('prog-save-btn').style.display = 'none';
+  document.getElementById('prog-custom-name-row').style.display = 'none';
+  renderProgGrid();
+}
+
+function startNewCustomProg() {
+  progEditDraft = { name: 'カスタム進行', beatsPerMeasure: 4, chords: Array(16).fill(null) };
+  progEditDraft.chords[0] = {root:0, type:'maj'};
+  document.getElementById('prog-delete-btn').style.display = 'none';
+  document.getElementById('prog-save-btn').style.display = 'inline-block';
+  document.getElementById('prog-custom-name-row').style.display = 'flex';
+  document.getElementById('prog-custom-name-input').value = 'カスタム進行';
+  renderProgGrid();
+}
+
+function deleteCustomProg() {
+  const val = document.getElementById('prog-select').value;
+  if (!val.startsWith('custom:')) return;
+  const idx = +val.split(':')[1];
+  if (!confirm(`"${customProgs[idx].name}" を削除しますか？`)) return;
+  customProgs.splice(idx, 1);
+  saveCustomProgsToLS();
+  updateProgSelect();
+  onProgSelectChange();
+}
+
+function saveCustomProg() {
+  if (!progEditDraft) return;
+  progEditDraft.name = document.getElementById('prog-custom-name-input').value || 'カスタム進行';
+  const val = document.getElementById('prog-select').value;
+  let newIdx;
+  if (val.startsWith('custom:')) {
+    newIdx = +val.split(':')[1];
+    customProgs[newIdx] = JSON.parse(JSON.stringify(progEditDraft));
+  } else {
+    newIdx = customProgs.length;
+    customProgs.push(JSON.parse(JSON.stringify(progEditDraft)));
+  }
+  saveCustomProgsToLS();
+  updateProgSelect();
+  document.getElementById('prog-select').value = 'custom:' + newIdx;
+  document.getElementById('prog-delete-btn').style.display = 'inline-block';
+  document.getElementById('prog-save-btn').style.display = 'none';
+  document.getElementById('prog-custom-name-row').style.display = 'none';
+}
+
+function chordDisplayName(root, type) {
+  return NOTE_NAMES[root] + CHORD_TYPES[type].label;
+}
+
+function getEffectiveChord(draft, slotIdx) {
+  for (let i = slotIdx; i >= 0; i--) {
+    if (draft.chords[i] !== null) return draft.chords[i];
+  }
+  return null;
+}
+
+function renderProgGrid() {
+  const toolbar = document.getElementById('prog-grid-toolbar');
+  const container = document.getElementById('prog-grid-container');
+  if (!progEditDraft) {
+    toolbar.innerHTML = '';
+    container.innerHTML = '<p style="color:#888;font-size:13px">コード進行を選択してください</p>';
+    return;
+  }
+  const draft = progEditDraft;
+  const bpm = draft.beatsPerMeasure;
+  const numMeasures = Math.ceil(draft.chords.length / bpm);
+
+  // toolbar
+  if (!progRunning) {
+    toolbar.innerHTML =
+      `<span style="font-size:13px;color:#555"><strong>${bpm}</strong>拍子</span>` +
+      `<button class="prog-btn" onclick="changeSig(-1)">－拍</button>` +
+      `<button class="prog-btn" onclick="changeSig(1)">＋拍</button>` +
+      `<button class="prog-btn" onclick="addMeasure()">＋小節</button>` +
+      (numMeasures > 1 ? `<button class="prog-btn" onclick="removeMeasure()">－小節</button>` : '');
+  } else {
+    toolbar.innerHTML = '';
+  }
+
+  let html = '<table class="prog-grid"><thead><tr><th>小節</th>';
+  for (let b = 0; b < bpm; b++) html += `<th>拍${b+1}</th>`;
+  html += '</tr></thead><tbody>';
+
+  for (let m = 0; m < numMeasures; m++) {
+    html += `<tr><td class="measure-num">${m+1}</td>`;
+    for (let b = 0; b < bpm; b++) {
+      const si = m * bpm + b;
+      if (si >= draft.chords.length) { html += '<td class="beat-cell"></td>'; continue; }
+      const chord = (progRunning ? progActiveProg : draft).chords[si];
+      const isActive = progRunning && progPos === si;
+      const isWrong = isActive && (progTempoMode==='metro' ? !progMetroBeatCorrect && progTotalWrong>0 : progFreeState==='wrong');
+      let cls = isActive ? (isWrong ? 'active-wrong' : 'active-beat') : (chord ? 'has-chord' : 'cont-cell');
+      let label = chord ? chordDisplayName(chord.root, chord.type) : (getEffectiveChord(progRunning ? progActiveProg : draft, si-1) ? '・' : '—');
+      const clickAttr = progRunning ? '' : `onclick="openCellEditor(${si}, event)"`;
+      html += `<td class="beat-cell ${cls}" ${clickAttr}>${label}</td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+// --- Cell editor ---
+function openCellEditor(si, event) {
+  if (progRunning) return;
+  cellEditorSlot = si;
+  const chord = progEditDraft.chords[si];
+  const bpm = progEditDraft.beatsPerMeasure;
+  document.getElementById('cell-editor-title').textContent = `小節${Math.floor(si/bpm)+1} 拍${si%bpm+1}`;
+  const eff = chord || getEffectiveChord(progEditDraft, si);
+  document.getElementById('cell-root').value = eff ? eff.root : 0;
+  document.getElementById('cell-type').value = eff ? eff.type : 'maj';
+  const ed = document.getElementById('cell-editor');
+  ed.style.display = 'block';
+  const x = Math.min(event.clientX, window.innerWidth - 250);
+  const y = Math.min(event.clientY + 8, window.innerHeight - 160);
+  ed.style.left = x + 'px'; ed.style.top = y + 'px';
+}
+function closeCellEditor() {
+  document.getElementById('cell-editor').style.display = 'none';
+  cellEditorSlot = null;
+}
+function confirmCellEdit() {
+  if (cellEditorSlot === null || !progEditDraft) return;
+  progEditDraft.chords[cellEditorSlot] = {
+    root: +document.getElementById('cell-root').value,
+    type: document.getElementById('cell-type').value
+  };
+  closeCellEditor();
+  document.getElementById('prog-save-btn').style.display = 'inline-block';
+  document.getElementById('prog-custom-name-row').style.display = 'flex';
+  renderProgGrid();
+}
+function clearCell() {
+  if (cellEditorSlot === null || !progEditDraft) return;
+  if (cellEditorSlot === 0) { alert('最初の拍はコードが必要です'); return; }
+  progEditDraft.chords[cellEditorSlot] = null;
+  closeCellEditor();
+  document.getElementById('prog-save-btn').style.display = 'inline-block';
+  document.getElementById('prog-custom-name-row').style.display = 'flex';
+  renderProgGrid();
+}
+document.addEventListener('keydown', e => { if (e.key==='Escape') closeCellEditor(); });
+
+function changeSig(delta) {
+  if (!progEditDraft) return;
+  const newBpm = Math.max(2, Math.min(8, progEditDraft.beatsPerMeasure + delta));
+  if (newBpm === progEditDraft.beatsPerMeasure) return;
+  const old = progEditDraft.beatsPerMeasure;
+  const numM = Math.ceil(progEditDraft.chords.length / old);
+  const newChords = [];
+  for (let m = 0; m < numM; m++) for (let b = 0; b < newBpm; b++) {
+    const si = m*old+b;
+    newChords.push(si < progEditDraft.chords.length ? progEditDraft.chords[si] : null);
+  }
+  progEditDraft.beatsPerMeasure = newBpm;
+  progEditDraft.chords = newChords;
+  document.getElementById('prog-save-btn').style.display = 'inline-block';
+  document.getElementById('prog-custom-name-row').style.display = 'flex';
+  renderProgGrid();
+}
+function addMeasure() {
+  if (!progEditDraft) return;
+  for (let b = 0; b < progEditDraft.beatsPerMeasure; b++) progEditDraft.chords.push(null);
+  document.getElementById('prog-save-btn').style.display = 'inline-block';
+  document.getElementById('prog-custom-name-row').style.display = 'flex';
+  renderProgGrid();
+}
+function removeMeasure() {
+  if (!progEditDraft) return;
+  const bpm = progEditDraft.beatsPerMeasure;
+  if (progEditDraft.chords.length <= bpm) return;
+  progEditDraft.chords.splice(progEditDraft.chords.length - bpm, bpm);
+  document.getElementById('prog-save-btn').style.display = 'inline-block';
+  document.getElementById('prog-custom-name-row').style.display = 'flex';
+  renderProgGrid();
+}
+
+function setTempoMode(mode) {
+  progTempoMode = mode;
+  ['metro','free'].forEach(m => document.getElementById('tgl-tempo-'+m).classList.toggle('on', m===mode));
+  document.getElementById('prog-bpm-row').style.display = mode==='metro' ? 'flex' : 'none';
+}
+
+function changeBpm(delta) {
+  progBpm = Math.max(20, Math.min(300, progBpm + delta));
+  document.getElementById('prog-bpm-val').textContent = progBpm;
+  if (progRunning) document.getElementById('prog-sc-bpm').textContent = progBpm;
+}
+
+// --- Practice ---
+function startProgPractice() {
+  if (!progEditDraft) { alert('コード進行を選択してください'); return; }
+  if (!progEditDraft.chords.some(c => c !== null)) { alert('コードが設定されていません'); return; }
+
+  progActiveProg = JSON.parse(JSON.stringify(progEditDraft));
+  progRunning = true;
+  progPos = 0;
+  progLoopCount = 0;
+  progCorrectThisLoop = true;
+  progAllMistakes = new Map();
+  progTotalCorrect = 0;
+  progTotalWrong = 0;
+  progBpm = +document.getElementById('prog-bpm-val').textContent || 80;
+  progMaxBpmReached = progBpm;
+  progJudgeLocked = false;
+  progFreeState = null;
+  progMetroBeatCorrect = false;
+
+  document.getElementById('prog-practice-panel').style.display = 'block';
+  document.getElementById('prog-result').style.display = 'none';
+  document.getElementById('prog-start-btn').style.display = 'none';
+  document.getElementById('prog-bpm-box').style.display = progTempoMode==='metro' ? 'block' : 'none';
+  document.getElementById('shared-piano').style.display = 'block';
+
+  updateProgScore();
+  progShowCurrentChord();
+  renderProgGrid();
+
+  if (progTempoMode === 'metro') scheduleNextBeat();
+}
+
+function stopProgPractice() {
+  progRunning = false;
+  clearProgMetro();
+  clearProgFreeTimer();
+  progJudgeLocked = false;
+  progFreeState = null;
+  document.getElementById('prog-beat-bar').style.width = '0%';
+  document.getElementById('prog-practice-panel').style.display = 'none';
+  document.getElementById('prog-start-btn').style.display = 'inline-block';
+  if (progTotalCorrect + progTotalWrong > 0 || progLoopCount > 0) showProgResult();
+  document.getElementById('shared-piano').style.display = 'none';
+  renderProgGrid();
+}
+
+function clearProgMetro() {
+  if (progMetroTimer) { clearTimeout(progMetroTimer); progMetroTimer = null; }
+  if (progBeatRAF) { cancelAnimationFrame(progBeatRAF); progBeatRAF = null; }
+}
+
+function scheduleNextBeat() {
+  if (!progRunning) return;
+  clearProgMetro();
+  const beatMs = 60000 / progBpm;
+  progBeatStart = performance.now();
+  progMetroBeatCorrect = false;
+  function animBeat() {
+    if (!progRunning) return;
+    const pct = Math.min((performance.now()-progBeatStart)/beatMs*100, 100);
+    const bar = document.getElementById('prog-beat-bar');
+    bar.style.width = pct + '%';
+    if (pct < 100) progBeatRAF = requestAnimationFrame(animBeat);
+  }
+  progBeatRAF = requestAnimationFrame(animBeat);
+  progMetroTimer = setTimeout(() => {
+    if (!progRunning) return;
+    // record result for this beat
+    if (progMetroBeatCorrect) progTotalCorrect++;
+    else { progTotalWrong++; progCorrectThisLoop = false; progAllMistakes.set(progPos, (progAllMistakes.get(progPos)||0)+1); }
+    updateProgScore();
+    advanceProgBeat();
+  }, beatMs);
+}
+
+function advanceProgBeat() {
+  if (!progRunning) return;
+  clearProgMetro();
+  document.getElementById('prog-beat-bar').style.width = '0%';
+  progPos++;
+  if (progPos >= progActiveProg.chords.length) {
+    onProgLoopEnd();
+    return;
+  }
+  progShowCurrentChord();
+  renderProgGrid();
+  if (progTempoMode === 'metro') scheduleNextBeat();
+}
+
+function onProgLoopEnd() {
+  progLoopCount++;
+  if (progTempoMode === 'metro') {
+    const stepUp = +document.getElementById('prog-step-up').value || 5;
+    const stepDown = +document.getElementById('prog-step-down').value || 10;
+    const minBpm = +document.getElementById('prog-min-bpm').value || 40;
+    const maxBpm = +document.getElementById('prog-max-bpm').value || 200;
+    if (progCorrectThisLoop) {
+      progBpm = Math.min(maxBpm, progBpm + stepUp);
+    } else {
+      progBpm = Math.max(minBpm, progBpm - stepDown);
+    }
+    progMaxBpmReached = Math.max(progMaxBpmReached, progBpm);
+    document.getElementById('prog-bpm-val').textContent = progBpm;
+    document.getElementById('prog-sc-bpm').textContent = progBpm;
+  }
+  progCorrectThisLoop = true;
+  progPos = 0;
+  updateProgScore();
+  progShowCurrentChord();
+  renderProgGrid();
+  if (progTempoMode === 'metro') scheduleNextBeat();
+}
+
+function progShowCurrentChord() {
+  const chord = getEffectiveChord(progActiveProg, progPos);
+  if (!chord) return;
+  const def = CHORD_TYPES[chord.type];
+  let notes = def.required.map(i => (chord.root+i)%12);
+  if (def.fifth !== null) {
+    const fifth = (chord.root+def.fifth)%12;
+    if (settings.fifth) notes = notes.filter(n => n!==fifth);
+    else if (!notes.includes(fifth)) notes.push(fifth);
+  }
+  document.getElementById('prog-chord-name').textContent = NOTE_NAMES[chord.root] + def.label;
+  document.getElementById('prog-chord-sub').textContent = '構成音: ' + notes.map(n=>NOTE_NAMES[n]).join(' - ');
+}
+
+function updateProgScore() {
+  document.getElementById('prog-sc-loop').textContent = progLoopCount;
+  document.getElementById('prog-sc-correct').textContent = progTotalCorrect;
+  document.getElementById('prog-sc-wrong').textContent = progTotalWrong;
+  document.getElementById('prog-sc-bpm').textContent = progBpm;
+}
+
+// --- Free mode timer ---
+function clearProgFreeTimer() {
+  if (progFreeRAF) { cancelAnimationFrame(progFreeRAF); progFreeRAF = null; }
+  progFreeState = null;
+}
+
+function startProgFreeTimer(state) {
+  clearProgFreeTimer();
+  progFreeState = state;
+  const bar = document.getElementById('prog-beat-bar');
+  bar.className = state === 'wrong' ? 'wrong' : '';
+  const duration = settings.timerSec * 1000;
+  const start = performance.now();
+  function tick() {
+    const pct = Math.min((performance.now()-start)/duration*100, 100);
+    bar.style.width = pct + '%';
+    if (pct >= 100) {
+      if (state === 'correct') {
+        progJudgeLocked = true;
+        progTotalCorrect++;
+        updateProgScore();
+        const fb = document.getElementById('prog-feedback');
+        fb.textContent='✅'; fb.className='ok'; fb.style.opacity='1';
+        clearProgFreeTimer();
+        bar.style.width = '0%';
+        setTimeout(() => {
+          fb.style.opacity='0'; fb.className='';
+          progJudgeLocked = false;
+          advanceProgBeat();
+        }, 500);
+      } else {
+        progJudgeLocked = false;
+        clearProgFreeTimer();
+        bar.style.width = '0%';
+        progCorrectThisLoop = false;
+        progAllMistakes.set(progPos, (progAllMistakes.get(progPos)||0)+1);
+        progTotalWrong++;
+        updateProgScore();
+        const fb = document.getElementById('prog-feedback');
+        fb.textContent='❌'; fb.className='ng'; fb.style.opacity='1';
+        setTimeout(() => { fb.style.opacity='0'; fb.className=''; }, 800);
+      }
+    } else {
+      progFreeRAF = requestAnimationFrame(tick);
+    }
+  }
+  progFreeRAF = requestAnimationFrame(tick);
+}
+
+function checkProgChord() {
+  if (!progRunning || progJudgeLocked) return;
+  const chord = getEffectiveChord(progActiveProg, progPos);
+  if (!chord) return;
+  const pressed = new Set();
+  physPressed.forEach(m => pressed.add(m%12));
+  Object.keys(activeNodes).forEach(m => { if(activeNodes[m]?.sustaining) pressed.add(Number(m)%12); });
+  const result = pressed.size > 0 ? checkChord(pressed, chord) : 'none';
+  if (progTempoMode === 'metro') {
+    if (result === 'correct') progMetroBeatCorrect = true;
+  } else {
+    if (result === 'correct') { if (progFreeState!=='correct') startProgFreeTimer('correct'); }
+    else if (result === 'wrong') { if (progFreeState!=='wrong') startProgFreeTimer('wrong'); }
+    else { clearProgFreeTimer(); document.getElementById('prog-beat-bar').style.width='0%'; }
+  }
+}
+
+// --- Result ---
+function showProgResult() {
+  const total = progTotalCorrect + progTotalWrong;
+  const rate = total ? Math.round(progTotalCorrect/total*100) : '-';
+  let html = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+    <div class="score-box"><div class="num">${progLoopCount}</div><div class="lbl">ループ</div></div>
+    <div class="score-box"><div class="num">${progTotalCorrect}</div><div class="lbl">正解</div></div>
+    <div class="score-box"><div class="num">${progTotalWrong}</div><div class="lbl">不正解</div></div>
+    <div class="score-box"><div class="num">${typeof rate==='number'?rate+'%':rate}</div><div class="lbl">正解率</div></div>
+    ${progTempoMode==='metro'?`<div class="score-box"><div class="num">${progMaxBpmReached}</div><div class="lbl">最高BPM</div></div>`:''}
+  </div>`;
+  if (progAllMistakes.size > 0) {
+    html += '<div style="font-size:13px;color:#555;margin-bottom:6px">苦手なコード:</div><div style="display:flex;gap:6px;flex-wrap:wrap">';
+    progAllMistakes.forEach((count, si) => {
+      const chord = getEffectiveChord(progActiveProg, si);
+      if (chord) html += `<span class="npill">${chordDisplayName(chord.root, chord.type)} ×${count}</span>`;
+    });
+    html += '</div>';
+  }
+  document.getElementById('prog-result-content').innerHTML = html;
+  document.getElementById('prog-result').style.display = 'block';
+  document.getElementById('prog-weak-btn').style.display = progAllMistakes.size > 0 ? 'inline-block' : 'none';
+}
+
+function progRestartLoop() {
+  document.getElementById('prog-result').style.display = 'none';
+  startProgPractice();
+}
+
+function progWeakpointPractice() {
+  if (progAllMistakes.size === 0) return;
+  // Build unique chord set from mistake slots
+  const weakSet = new Map();
+  progAllMistakes.forEach((_, si) => {
+    const chord = getEffectiveChord(progActiveProg, si);
+    if (chord) {
+      const key = chord.root + ':' + chord.type;
+      if (!weakSet.has(key)) weakSet.set(key, chord);
+    }
+  });
+  pool = shuffle([...weakSet.values()]);
+  deckIndex = 0;
+  // Switch to flashcard tab and start
+  switchTab('flash');
+  scoreCorrect=0; scoreWrong=0; scoreStreak=0; scorePass=0;
+  practiceRunning = true;
+  judgingLocked = false;
+  updateScore();
+  document.getElementById('practice-area').style.display = 'block';
+  document.getElementById('shared-piano').style.display = 'block';
+  settingsOpen = false;
+  document.getElementById('settings-body').style.display = 'none';
+  document.getElementById('settings-toggle').textContent = '▼ 開く';
+  nextChord();
+}
+
+// ===================== ピアノ =====================
+const keyEls = {};
+const physPressed = new Set();
+let pedalOn = false;
+const activeNodes = {};
+let audioCtx=null, masterGain=null, volume=0.7;
+
+function getCtx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    masterGain = audioCtx.createGain(); masterGain.gain.value=volume; masterGain.connect(audioCtx.destination);
+  }
+  return audioCtx;
+}
+function midiToFreq(n){return 440*Math.pow(2,(n-69)/12);}
+function startNote(midi){
+  if(activeNodes[midi])return;
+  const ctx=getCtx(),freq=midiToFreq(midi);
+  const gain=ctx.createGain(); gain.connect(masterGain);
+  const oscs=[];
+  [['triangle',freq,0.55],['sine',freq*2,0.22],['sine',freq*4,0.07],['sine',freq*0.5,0.12]].forEach(([t,f,g])=>{
+    const o=ctx.createOscillator(),gn=ctx.createGain();
+    o.type=t; o.frequency.value=f; gn.gain.value=g;
+    o.connect(gn); gn.connect(gain); o.start(ctx.currentTime);
+    oscs.push(o);
+  });
+  const now=ctx.currentTime,nm=midi/127,decay=0.35+nm*0.5,sus=Math.max(0.2-nm*0.1,0.01);
+  gain.gain.setValueAtTime(0,now);
+  gain.gain.linearRampToValueAtTime(0.85,now+0.007);
+  gain.gain.exponentialRampToValueAtTime(sus,now+decay);
+  activeNodes[midi]={gain,oscs,release:2-nm*0.9,sustaining:false};
+}
+function releaseNote(midi,force=false){
+  const node=activeNodes[midi];if(!node)return;
+  if(pedalOn&&!force){node.sustaining=true;return;}
+  const ctx=getCtx(),{gain,oscs,release}=node,now=ctx.currentTime;
+  gain.gain.cancelScheduledValues(now);gain.gain.setValueAtTime(gain.gain.value,now);
+  gain.gain.exponentialRampToValueAtTime(0.0001,now+release);
+  oscs.forEach(o=>{try{o.stop(now+release+0.05);}catch(e){}});
+  delete activeNodes[midi];
+}
+function pedalRelease(){
+  Object.keys(activeNodes).forEach(m=>{
+    const mi=Number(m);
+    if(activeNodes[mi]?.sustaining&&!physPressed.has(mi))releaseNote(mi,true);
+  });
+}
+function noteOn(midi){
+  physPressed.add(midi);startNote(midi);
+  const el=keyEls[midi];if(el){el.classList.remove('pedal','hint');el.classList.add('active');}
+  showPill(midi);checkCurrentChord();
+}
+function noteOff(midi){
+  physPressed.delete(midi);releaseNote(midi);
+  const el=keyEls[midi];if(el){el.classList.remove('active');if(pedalOn)el.classList.add('pedal');else el.classList.remove('pedal');}
+  if(!pedalOn)removePill(midi);else{const p=document.getElementById('np'+midi);if(p)p.classList.add('pedal');}
+  checkCurrentChord();
+}
+function noteName(midi){return NOTE_NAMES[midi%12]+(Math.floor(midi/12)-1);}
+function showPill(midi){
+  if(document.getElementById('np'+midi))return;
+  const p=document.createElement('span');p.className='npill';p.id='np'+midi;p.textContent=noteName(midi);
+  document.getElementById('note-row').appendChild(p);
+}
+function removePill(midi){document.getElementById('np'+midi)?.remove();}
+function buildPiano(){
+  const piano=document.getElementById('piano');
+  const whites=[];
+  for(let m=START;m<=END;m++){if(!BLACK_SET.has(m%12))whites.push(m);}
+  const wkXMap={};
+  whites.forEach((m,i)=>{
+    const x=i*WK_W;wkXMap[m]=x;
+    const el=document.createElement('div');el.className='wk';
+    if(m%12===0){const lbl=document.createElement('span');lbl.textContent=noteName(m);el.appendChild(lbl);}
+    el.style.left=x+'px';
+    el.addEventListener('mousedown',e=>{e.preventDefault();noteOn(m);});
+    el.addEventListener('mouseup',()=>noteOff(m));
+    el.addEventListener('mouseleave',()=>{if(physPressed.has(m))noteOff(m);});
+    piano.appendChild(el);keyEls[m]=el;
+  });
+  for(let m=START;m<=END;m++){
+    if(!BLACK_SET.has(m%12))continue;
+    const prev=m-1;if(wkXMap[prev]===undefined)continue;
+    const x=wkXMap[prev]+WK_W-BK_W/2;
+    const el=document.createElement('div');el.className='bk';el.style.left=x+'px';
+    el.addEventListener('mousedown',e=>{e.preventDefault();noteOn(m);});
+    el.addEventListener('mouseup',()=>noteOff(m));
+    el.addEventListener('mouseleave',()=>{if(physPressed.has(m))noteOff(m);});
+    piano.appendChild(el);keyEls[m]=el;
+  }
+  piano.style.width=(whites.length*WK_W)+'px';
+}
+
+// ===================== MIDI =====================
+async function connectMidi(){
+  if(!navigator.requestMIDIAccess){setStatus('Web MIDIに非対応','err');return;}
+  try{const access=await navigator.requestMIDIAccess();setupMidi(access);access.onstatechange=()=>setupMidi(access);}
+  catch(e){setStatus('MIDIアクセス拒否','err');}
+}
+function setupMidi(access){
+  const inputs=[...access.inputs.values()];
+  if(!inputs.length){setStatus('MIDIデバイスが見つかりません','');return;}
+  inputs.forEach(i=>{i.onmidimessage=handleMidi;});
+  setStatus('接続中: '+inputs.map(i=>i.name).join(', '),'on');
+}
+function handleMidi(e){
+  const[st,note,vel]=e.data,cmd=st&0xf0;
+  if(cmd===0x90&&vel>0)noteOn(note);
+  else if(cmd===0x80||(cmd===0x90&&vel===0))noteOff(note);
+  else if(cmd===0xb0&&note===64){
+    pedalOn=vel>=64;
+    const badge=document.getElementById('pedal-badge');
+    badge.textContent=pedalOn?'ペダル ON':'ペダル OFF';badge.className=pedalOn?'on':'';
+    if(!pedalOn){
+      pedalRelease();
+      Object.keys(keyEls).forEach(m=>{const mi=Number(m);if(!physPressed.has(mi)){keyEls[mi]?.classList.remove('pedal');removePill(mi);}});
+    }
+    checkCurrentChord();
+  }
+}
+function setStatus(msg,state){
+  document.getElementById('midi-status').textContent=msg;
+  document.getElementById('midi-dot').className=state;
+}
+document.getElementById('sel-timer').addEventListener('input',e=>{
+  document.getElementById('timer-val').textContent = parseFloat(e.target.value).toFixed(1)+'秒';
+});
+document.getElementById('vol').addEventListener('input',e=>{
+  volume=e.target.value/100;document.getElementById('vol-val').textContent=e.target.value;
+  if(masterGain)masterGain.gain.value=volume;
+});
+
+buildPiano();
+connectMidi();
+
+// Phase 3 initialization
+loadCustomProgs();
+updateProgSelect();
+progEditDraft = JSON.parse(JSON.stringify(PROG_PRESETS[0]));
+renderProgGrid();
+</script>
+</body>
+</html>
