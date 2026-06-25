@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>テトリス</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: 'Courier New', monospace;
+    color: #eee;
+  }
+  #app {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+  }
+  canvas {
+    border: 2px solid #4a4a8a;
+    background: #0d0d1a;
+    display: block;
+  }
+  #sidebar {
+    width: 140px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .panel {
+    background: #0d0d1a;
+    border: 2px solid #4a4a8a;
+    padding: 12px;
+    border-radius: 4px;
+  }
+  .panel h3 {
+    font-size: 11px;
+    color: #8888bb;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+  .panel .value {
+    font-size: 24px;
+    color: #fff;
+    font-weight: bold;
+  }
+  #next-canvas {
+    display: block;
+    margin: 4px auto 0;
+  }
+  #message {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.85);
+    border: 2px solid #8888ff;
+    padding: 32px 48px;
+    text-align: center;
+    border-radius: 8px;
+    display: none;
+  }
+  #message h2 { font-size: 28px; margin-bottom: 16px; color: #fff; }
+  #message p { color: #aaa; margin-bottom: 20px; font-size: 14px; }
+  #message button {
+    background: #4a4a8a;
+    color: #fff;
+    border: none;
+    padding: 10px 28px;
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-family: inherit;
+  }
+  #message button:hover { background: #6666bb; }
+  .controls {
+    font-size: 11px;
+    color: #666;
+    line-height: 1.8;
+  }
+  .controls span { color: #aaa; }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="board" width="300" height="600"></canvas>
+  <div id="sidebar">
+    <div class="panel">
+      <h3>スコア</h3>
+      <div class="value" id="score">0</div>
+    </div>
+    <div class="panel">
+      <h3>レベル</h3>
+      <div class="value" id="level">1</div>
+    </div>
+    <div class="panel">
+      <h3>ライン</h3>
+      <div class="value" id="lines">0</div>
+    </div>
+    <div class="panel">
+      <h3>NEXT</h3>
+      <canvas id="next-canvas" width="116" height="80"></canvas>
+    </div>
+    <div class="panel controls">
+      <span>←→</span> 移動<br>
+      <span>↑</span> 回転<br>
+      <span>↓</span> ソフトドロップ<br>
+      <span>Space</span> ハードドロップ<br>
+      <span>P</span> 一時停止
+    </div>
+  </div>
+</div>
+
+<div id="message">
+  <h2 id="msg-title">ゲームオーバー</h2>
+  <p id="msg-body">スコア: 0</p>
+  <button id="msg-btn">もう一度</button>
+</div>
+
+<script>
+const COLS = 10;
+const ROWS = 20;
+const BLOCK = 30;
+
+const COLORS = [
+  null,
+  '#00f0f0', // I - シアン
+  '#0000f0', // J - 青
+  '#f0a000', // L - オレンジ
+  '#f0f000', // O - 黄
+  '#00f000', // S - 緑
+  '#a000f0', // T - 紫
+  '#f00000', // Z - 赤
+];
+
+const PIECES = [
+  null,
+  [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], // I
+  [[2,0,0],[2,2,2],[0,0,0]],                  // J
+  [[0,0,3],[3,3,3],[0,0,0]],                  // L
+  [[4,4],[4,4]],                               // O
+  [[0,5,5],[5,5,0],[0,0,0]],                  // S
+  [[0,6,0],[6,6,6],[0,0,0]],                  // T
+  [[7,7,0],[0,7,7],[0,0,0]],                  // Z
+];
+
+const SCORE_TABLE = [0, 100, 300, 500, 800];
+
+const canvas = document.getElementById('board');
+const ctx = canvas.getContext('2d');
+const nextCanvas = document.getElementById('next-canvas');
+const nextCtx = nextCanvas.getContext('2d');
+
+let board, piece, pieceX, pieceY, nextPiece;
+let score, level, lines;
+let gameOver, paused;
+let dropInterval, lastTime, animId;
+
+function newBoard() {
+  return Array.from({length: ROWS}, () => new Array(COLS).fill(0));
+}
+
+function randomPiece() {
+  return Math.ceil(Math.random() * 7);
+}
+
+function init() {
+  board = newBoard();
+  score = 0; level = 1; lines = 0;
+  gameOver = false; paused = false;
+  dropInterval = 800;
+  nextPiece = randomPiece();
+  spawn();
+  updateUI();
+  document.getElementById('message').style.display = 'none';
+  if (animId) cancelAnimationFrame(animId);
+  lastTime = 0;
+  animId = requestAnimationFrame(loop);
+}
+
+function spawn() {
+  const type = nextPiece;
+  nextPiece = randomPiece();
+  piece = PIECES[type].map(r => [...r]);
+  pieceX = Math.floor((COLS - piece[0].length) / 2);
+  pieceY = 0;
+  if (collide(piece, pieceX, pieceY)) {
+    endGame();
+  }
+  drawNext();
+}
+
+function collide(p, px, py) {
+  for (let r = 0; r < p.length; r++) {
+    for (let c = 0; c < p[r].length; c++) {
+      if (!p[r][c]) continue;
+      const nx = px + c, ny = py + r;
+      if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
+      if (ny >= 0 && board[ny][nx]) return true;
+    }
+  }
+  return false;
+}
+
+function rotate(p) {
+  const rows = p.length, cols = p[0].length;
+  const result = Array.from({length: cols}, () => new Array(rows).fill(0));
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      result[c][rows - 1 - r] = p[r][c];
+  return result;
+}
+
+function lock() {
+  for (let r = 0; r < piece.length; r++)
+    for (let c = 0; c < piece[r].length; c++)
+      if (piece[r][c] && pieceY + r >= 0)
+        board[pieceY + r][pieceX + c] = piece[r][c];
+  clearLines();
+  spawn();
+}
+
+function clearLines() {
+  let cleared = 0;
+  for (let r = ROWS - 1; r >= 0; r--) {
+    if (board[r].every(v => v !== 0)) {
+      board.splice(r, 1);
+      board.unshift(new Array(COLS).fill(0));
+      cleared++;
+      r++;
+    }
+  }
+  if (cleared > 0) {
+    lines += cleared;
+    score += SCORE_TABLE[cleared] * level;
+    level = Math.floor(lines / 10) + 1;
+    dropInterval = Math.max(100, 800 - (level - 1) * 70);
+    updateUI();
+  }
+}
+
+function hardDrop() {
+  while (!collide(piece, pieceX, pieceY + 1)) pieceY++;
+  lock();
+}
+
+function ghostY() {
+  let gy = pieceY;
+  while (!collide(piece, pieceX, gy + 1)) gy++;
+  return gy;
+}
+
+function drawBlock(context, x, y, color, alpha = 1) {
+  context.globalAlpha = alpha;
+  context.fillStyle = color;
+  context.fillRect(x * BLOCK + 1, y * BLOCK + 1, BLOCK - 2, BLOCK - 2);
+  context.fillStyle = 'rgba(255,255,255,0.25)';
+  context.fillRect(x * BLOCK + 1, y * BLOCK + 1, BLOCK - 2, 4);
+  context.fillRect(x * BLOCK + 1, y * BLOCK + 1, 4, BLOCK - 2);
+  context.globalAlpha = 1;
+}
+
+function draw() {
+  ctx.fillStyle = '#0d0d1a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // grid
+  ctx.strokeStyle = '#1a1a3a';
+  ctx.lineWidth = 0.5;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      ctx.strokeRect(c * BLOCK, r * BLOCK, BLOCK, BLOCK);
+    }
+  }
+
+  // board
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (board[r][c])
+        drawBlock(ctx, c, r, COLORS[board[r][c]]);
+
+  // ghost
+  if (!gameOver && piece) {
+    const gy = ghostY();
+    for (let r = 0; r < piece.length; r++)
+      for (let c = 0; c < piece[r].length; c++)
+        if (piece[r][c])
+          drawBlock(ctx, pieceX + c, gy + r, COLORS[piece[r][c]], 0.2);
+  }
+
+  // current piece
+  if (!gameOver && piece) {
+    for (let r = 0; r < piece.length; r++)
+      for (let c = 0; c < piece[r].length; c++)
+        if (piece[r][c])
+          drawBlock(ctx, pieceX + c, pieceY + r, COLORS[piece[r][c]]);
+  }
+
+  if (paused) {
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 32px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('PAUSE', canvas.width / 2, canvas.height / 2);
+  }
+}
+
+function drawNext() {
+  nextCtx.fillStyle = '#0d0d1a';
+  nextCtx.fillRect(0, 0, nextCanvas.width, nextCanvas.height);
+  const p = PIECES[nextPiece];
+  const offX = Math.floor((4 - p[0].length) / 2);
+  const offY = Math.floor((3 - p.length) / 2);
+  const s = 22;
+  for (let r = 0; r < p.length; r++)
+    for (let c = 0; c < p[r].length; c++)
+      if (p[r][c]) {
+        nextCtx.fillStyle = COLORS[p[r][c]];
+        nextCtx.fillRect((offX + c) * s + 8, (offY + r) * s + 8, s - 2, s - 2);
+        nextCtx.fillStyle = 'rgba(255,255,255,0.25)';
+        nextCtx.fillRect((offX + c) * s + 8, (offY + r) * s + 8, s - 2, 3);
+      }
+}
+
+function updateUI() {
+  document.getElementById('score').textContent = score.toLocaleString();
+  document.getElementById('level').textContent = level;
+  document.getElementById('lines').textContent = lines;
+}
+
+function endGame() {
+  gameOver = true;
+  cancelAnimationFrame(animId);
+  const msg = document.getElementById('message');
+  document.getElementById('msg-title').textContent = 'ゲームオーバー';
+  document.getElementById('msg-body').textContent = `スコア: ${score.toLocaleString()} / ライン: ${lines}`;
+  document.getElementById('msg-btn').textContent = 'もう一度';
+  msg.style.display = 'block';
+}
+
+let dropAccum = 0;
+function loop(ts) {
+  if (!lastTime) lastTime = ts;
+  const dt = ts - lastTime;
+  lastTime = ts;
+
+  if (!paused && !gameOver) {
+    dropAccum += dt;
+    if (dropAccum >= dropInterval) {
+      dropAccum = 0;
+      if (!collide(piece, pieceX, pieceY + 1)) {
+        pieceY++;
+      } else {
+        lock();
+      }
+    }
+    draw();
+  }
+  if (!gameOver) animId = requestAnimationFrame(loop);
+}
+
+document.addEventListener('keydown', e => {
+  if (gameOver) return;
+  switch (e.code) {
+    case 'ArrowLeft':
+      if (!paused && !collide(piece, pieceX - 1, pieceY)) pieceX--;
+      break;
+    case 'ArrowRight':
+      if (!paused && !collide(piece, pieceX + 1, pieceY)) pieceX++;
+      break;
+    case 'ArrowDown':
+      if (!paused && !collide(piece, pieceX, pieceY + 1)) { pieceY++; dropAccum = 0; }
+      break;
+    case 'ArrowUp':
+      if (!paused) {
+        const r = rotate(piece);
+        // wall kick
+        for (const dx of [0, -1, 1, -2, 2]) {
+          if (!collide(r, pieceX + dx, pieceY)) {
+            piece = r; pieceX += dx; break;
+          }
+        }
+      }
+      break;
+    case 'Space':
+      if (!paused) { e.preventDefault(); hardDrop(); }
+      break;
+    case 'KeyP':
+      paused = !paused;
+      if (!paused) { lastTime = 0; animId = requestAnimationFrame(loop); }
+      break;
+  }
+  if (!paused) draw();
+});
+
+document.getElementById('msg-btn').addEventListener('click', init);
+
+init();
+</script>
+</body>
+</html>
