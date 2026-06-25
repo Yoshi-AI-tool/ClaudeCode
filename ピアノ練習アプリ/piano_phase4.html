@@ -84,13 +84,19 @@ html, body { height: 100%; overflow: hidden; font-family: -apple-system, BlinkMa
 .wk.pedal  { background: #C8EFE0 !important; }
 .wk.hint      { background: #FFF3CD !important; }
 .wk.hint-root { background: #FFD0A0 !important; }
-.wk:hover:not(.active):not(.pedal):not(.hint):not(.hint-root) { background: #f5f5f5; }
+.wk.hint-bass { background: #C8E6FF !important; }
+.wk:hover:not(.active):not(.pedal):not(.hint):not(.hint-root):not(.hint-bass) { background: #f5f5f5; }
 .bk { width: 10px; height: 50px; background: #222; border-radius: 0 0 3px 3px; cursor: pointer; position: absolute; z-index: 2; top: 0; transition: background 0.06s; box-shadow: 0 0 0 1px #000; }
 .bk.active { background: #378ADD !important; }
 .bk.pedal  { background: #1D9E75 !important; }
 .bk.hint      { background: #FFF3CD !important; }
 .bk.hint-root { background: #FFD0A0 !important; }
-.bk:hover:not(.active):not(.pedal):not(.hint) { background: #444; }
+.bk.hint-bass { background: #C8E6FF !important; }
+.wk[data-finger]::after { content:attr(data-finger); position:absolute; bottom:3px; left:50%; transform:translateX(-50%); width:13px; height:13px; line-height:13px; background:#378ADD; color:#fff; border-radius:50%; font-size:9px; font-weight:700; text-align:center; pointer-events:none; z-index:3; }
+.bk[data-finger]::after { content:attr(data-finger); position:absolute; bottom:2px; left:50%; transform:translateX(-50%); width:10px; height:10px; line-height:10px; background:#378ADD; color:#fff; border-radius:50%; font-size:8px; font-weight:700; text-align:center; pointer-events:none; z-index:3; }
+.wk[data-lhand]::after { content:attr(data-lhand); position:absolute; bottom:3px; left:50%; transform:translateX(-50%); width:13px; height:13px; line-height:13px; background:#1D9E75; color:#fff; border-radius:50%; font-size:9px; font-weight:700; text-align:center; pointer-events:none; z-index:3; }
+.bk[data-lhand]::after { content:attr(data-lhand); position:absolute; bottom:2px; left:50%; transform:translateX(-50%); width:10px; height:10px; line-height:10px; background:#1D9E75; color:#fff; border-radius:50%; font-size:8px; font-weight:700; text-align:center; pointer-events:none; z-index:3; }
+.bk:hover:not(.active):not(.pedal):not(.hint):not(.hint-bass) { background: #444; }
 
 #note-row { min-height: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 .npill { background: #E6F1FB; color: #0C447C; padding: 3px 12px; border-radius: 20px; font-size: 13px; font-weight: 500; }
@@ -298,6 +304,14 @@ html, body { height: 100%; overflow: hidden; font-family: -apple-system, BlinkMa
         <span style="font-size:12px;color:#888;margin-left:4px">範囲: <input type="number" id="prog-min-bpm" value="40" style="width:44px;font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:5px">〜<input type="number" id="prog-max-bpm" value="200" style="width:50px;font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:5px"></span>
       </div>
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <div class="setting-row" style="margin-bottom:8px">
+          <label>手の大きさ（ヒント運指の最大幅）</label>
+          <select id="prog-hand-size" style="font-size:13px;padding:4px 8px;border:1px solid #ccc;border-radius:7px">
+            <option value="12">小（オクターブ）</option>
+            <option value="14" selected>標準（9度）</option>
+            <option value="16">大（10度）</option>
+          </select>
+        </div>
         <button class="prog-btn primary" id="prog-start-btn" onclick="startProgPractice()">練習スタート ▶</button>
         <label class="hint-label"><span class="tog-sw"><input type="checkbox" id="prog-hint-cb" onchange="toggleProgHint()"><span class="tog-sl"></span></span>💡 ヒント</label>
         <button class="prog-btn" id="prog-save-btn" onclick="saveCustomProg()" style="display:none">💾 保存</button>
@@ -786,6 +800,10 @@ let progJudgeLocked = false;
 let progMetroBeatCorrect = false;
 let progActiveProg = null; // deep-copy used during practice
 let progHintOn = false;
+let progCurrentVoicing = null;
+let progPrevVoicing = null;
+let progPrevBassMidi = null;
+let progBassHandAnchor = null;
 
 function loadCustomProgs() {
   try { customProgs = JSON.parse(localStorage.getItem('piano_custom_progs') || '[]'); }
@@ -1169,6 +1187,10 @@ function startProgPractice() {
   progJudgeLocked = false;
   progFreeState = null;
   progMetroBeatCorrect = false;
+  progCurrentVoicing = null;
+  progPrevVoicing = null;
+  progPrevBassMidi = null;
+  progBassHandAnchor = null;
 
   document.getElementById('prog-score-row').style.display = 'flex';
   document.getElementById('prog-practice-panel').style.display = 'block';
@@ -1208,8 +1230,12 @@ function stopProgPractice() {
   document.getElementById('prog-settings-panel').style.display = '';
   document.getElementById('mode-content').classList.remove('practicing');
   progHintOn = false;
+  progCurrentVoicing = null;
+  progPrevVoicing = null;
+  progPrevBassMidi = null;
+  progBassHandAnchor = null;
   document.getElementById('prog-hint-cb').checked = false;
-  Object.values(keyEls).forEach(el => el.classList.remove('hint', 'hint-root'));
+  Object.values(keyEls).forEach(el => { el.classList.remove('hint', 'hint-root', 'hint-bass'); delete el.dataset.finger; delete el.dataset.lhand; });
   const _c = document.getElementById('prog-grid-container');
   if (_c) { _c.style.height = ''; _c.style.overflowY = ''; }
   renderProgGrid();
@@ -1261,6 +1287,9 @@ function scheduleNextBeat() {
 
 function advanceProgBeat() {
   if (!progRunning) return;
+  progPrevVoicing = progCurrentVoicing;
+  progCurrentVoicing = null;
+  // bass state is updated inside applyProgHint
   clearProgMetro();
   document.getElementById('prog-beat-bar').style.width = '0%';
   progPos++;
@@ -1309,34 +1338,141 @@ function progShowCurrentChord() {
   }
   document.getElementById('prog-chord-name').textContent = NOTE_NAMES[chord.root] + def.label;
   document.getElementById('prog-chord-sub').textContent = '構成音: ' + notes.map(n=>NOTE_NAMES[n]).join(' - ');
-  if (progHintOn) applyProgHint(chord, notes);
+  if (progHintOn) applyProgHint(chord);
 }
 
-function applyProgHint(chord, notes) {
-  Object.values(keyEls).forEach(el => el.classList.remove('hint', 'hint-root'));
-  Object.entries(keyEls).forEach(([m, el]) => {
-    const pc = Number(m) % 12;
-    if (pc === chord.root) el.classList.add('hint-root');
-    else if (notes.includes(pc)) el.classList.add('hint');
+// ===================== Phase 4: ボイシング最適化 =====================
+function getMaxHandSpan() {
+  return +(document.getElementById('prog-hand-size')?.value ?? 14);
+}
+
+function generateAscendingVoicings(pcs, minMidi, maxMidi) {
+  const result = [];
+  function gen(remaining, lastNote, current) {
+    if (remaining.length === 0) { result.push([...current]); return; }
+    for (let i = 0; i < remaining.length; i++) {
+      const pc = remaining[i];
+      const rest = remaining.filter((_, j) => j !== i);
+      for (let m = lastNote + 1; m <= maxMidi; m++) {
+        if (m % 12 === pc) { current.push(m); gen(rest, m, current); current.pop(); }
+      }
+    }
+  }
+  gen(pcs, minMidi - 1, []);
+  return result;
+}
+
+function computeBassNotes(chord) {
+  const root = chord.root;
+  const target = progPrevBassMidi !== null ? progPrevBassMidi : 43;
+  let bassRoot = -1;
+  for (let m = 36; m <= 55; m++) {
+    if (m % 12 === root) {
+      if (bassRoot === -1 || Math.abs(m - target) < Math.abs(bassRoot - target)) bassRoot = m;
+    }
+  }
+  if (bassRoot === -1) return null;
+  return [bassRoot];
+}
+
+function assignBassFinger(bassMidi) {
+  // ハンドポジション（小指の位置）からの相対オフセットで運指を決定
+  // 標準5指: anchor=5, +2=4, +4=3, +5=2, +7=1 (C-D-E-F-Gに対応)
+  if (progBassHandAnchor === null) {
+    progBassHandAnchor = bassMidi;
+    return 5;
+  }
+  const offset = bassMidi - progBassHandAnchor;
+  if (offset < 0 || offset > 8) {
+    // ポジション外：小指でポジション移動
+    progBassHandAnchor = bassMidi;
+    return 5;
+  }
+  if (offset >= 7) return 1;
+  if (offset >= 5) return 2;
+  if (offset >= 4) return 3;
+  if (offset >= 2) return 4;
+  return 5;
+}
+
+function computeOptimalVoicing(chord) {
+  const def = CHORD_TYPES[chord.type];
+  const root = chord.root;
+  let pcs = def.required.map(i => (root + i) % 12);
+  if (def.fifth !== null && settings.fifth) pcs = pcs.filter(pc => pc !== (root + def.fifth) % 12);
+
+  const maxSpan = getMaxHandSpan();
+  const allVoicings = generateAscendingVoicings(pcs, 48, 83);
+  const valid = allVoicings.filter(v => {
+    if (v[v.length-1] - v[0] > maxSpan) return false;
+    for (let i = 0; i < v.length - 1; i++) { if (v[i+1] - v[i] <= 1) return false; } // 半音・同音禁止
+    return true;
   });
+  if (!valid.length) return null;
+
+  // 7thコードの7度のピッチクラス
+  const seventh = (def.required.includes(10) || def.required.includes(11))
+    ? (root + (def.required.includes(10) ? 10 : 11)) % 12 : null;
+
+  const scored = valid.map(v => {
+    let score = 0;
+    if (progPrevVoicing) {
+      const n = Math.min(v.length, progPrevVoicing.length);
+      score += v.slice(0, n).reduce((s, note, i) => s + Math.abs(note - progPrevVoicing[i]), 0) * 2;
+    } else {
+      const center = v.reduce((a, b) => a + b, 0) / v.length;
+      score += Math.abs(center - 64); // D4付近を基準
+    }
+    if (seventh !== null && v[v.length-1] % 12 === seventh) score -= 5; // 7thトップにボーナス
+    score += (v[v.length-1] - v[0]) * 0.2; // スパンが広すぎるのを少し抑制
+    return { v, score };
+  });
+  scored.sort((a, b) => a.score - b.score);
+  return scored[0].v;
+}
+
+function assignFingers(voicing) {
+  const n = voicing.length;
+  if (n <= 1) return [1];
+  if (n === 2) return [1, 5];
+  if (n === 3) return (voicing[2] - voicing[0] <= 7) ? [1, 2, 5] : [1, 3, 5];
+  if (n === 4) return (voicing[3] - voicing[2] >= 4) ? [1, 2, 3, 5] : [1, 2, 4, 5];
+  return voicing.map((_, i) => i + 1);
+}
+
+function applyProgHint(chord) {
+  Object.values(keyEls).forEach(el => { el.classList.remove('hint', 'hint-root', 'hint-bass'); delete el.dataset.finger; delete el.dataset.lhand; });
+  // 右手ボイシング
+  const voicing = computeOptimalVoicing(chord);
+  progCurrentVoicing = voicing;
+  if (voicing) {
+    const fingers = assignFingers(voicing);
+    voicing.forEach((midi, i) => {
+      const el = keyEls[midi];
+      if (!el) return;
+      el.classList.add(midi % 12 === chord.root ? 'hint-root' : 'hint');
+      el.dataset.finger = fingers[i];
+    });
+  }
+  // 左手ベース（水色 + 緑の指番号: 前音との距離で決定）
+  const bassNotes = computeBassNotes(chord);
+  if (bassNotes) {
+    const finger = assignBassFinger(bassNotes[0]);
+    progPrevBassMidi = bassNotes[0];
+    const el = keyEls[bassNotes[0]];
+    if (el) { el.classList.add('hint-bass'); el.dataset.lhand = String(finger); }
+  } else {
+    progPrevBassMidi = null;
+    progBassHandAnchor = null;
+  }
 }
 
 function toggleProgHint() {
   progHintOn = document.getElementById('prog-hint-cb').checked;
+  Object.values(keyEls).forEach(el => { el.classList.remove('hint', 'hint-root', 'hint-bass'); delete el.dataset.finger; delete el.dataset.lhand; });
   if (progHintOn && progActiveProg) {
     const chord = getEffectiveChord(progActiveProg, progPos);
-    if (chord) {
-      const def = CHORD_TYPES[chord.type];
-      let notes = def.required.map(i => (chord.root+i)%12);
-      if (def.fifth !== null) {
-        const fifth = (chord.root+def.fifth)%12;
-        if (settings.fifth) notes = notes.filter(n => n!==fifth);
-        else if (!notes.includes(fifth)) notes.push(fifth);
-      }
-      applyProgHint(chord, notes);
-    }
-  } else {
-    Object.values(keyEls).forEach(el => el.classList.remove('hint', 'hint-root'));
+    if (chord) applyProgHint(chord);
   }
 }
 

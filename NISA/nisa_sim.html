@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NISA試算シミュレーター</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', 'Hiragino Sans', sans-serif; background: #f5f6f8; color: #222; font-size: 14px; }
+
+h1 { font-size: 20px; font-weight: 700; }
+h2 { font-size: 15px; font-weight: 700; margin-bottom: 12px; }
+
+.container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+
+/* Header */
+.header { background: #1a1f2e; color: #fff; padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
+.header span { font-size: 12px; color: #8a9bb5; margin-left: 4px; }
+
+/* Panels */
+.panels { display: grid; grid-template-columns: 340px 1fr; gap: 16px; margin-top: 16px; }
+
+.card { background: #fff; border-radius: 10px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+
+/* Form */
+.form-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.form-row label { width: 110px; color: #555; font-size: 13px; flex-shrink: 0; }
+.form-row input[type=number], .form-row input[type=month], .form-row select {
+  border: 1px solid #d0d5dd; border-radius: 6px; padding: 5px 8px; font-size: 13px; width: 130px; outline: none;
+}
+.form-row input:focus, .form-row select:focus { border-color: #378ADD; }
+.unit { color: #888; font-size: 12px; }
+
+/* Plan table */
+.plan-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+.plan-table th { background: #f0f2f5; font-size: 12px; padding: 5px 6px; text-align: center; border: 1px solid #e0e3e8; }
+.plan-table td { padding: 4px 4px; border: 1px solid #e8eaf0; vertical-align: middle; }
+.plan-table input[type=month] { width: 110px; border: none; background: transparent; font-size: 12px; outline: none; }
+.plan-table input[type=number] { width: 80px; border: none; background: transparent; font-size: 12px; text-align: right; outline: none; }
+.plan-table input:focus { background: #f0f6ff; border-radius: 3px; }
+.plan-table .del-btn { background: none; border: none; color: #aaa; cursor: pointer; font-size: 14px; padding: 0 4px; }
+.plan-table .del-btn:hover { color: #E24B4A; }
+
+.btn { padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; }
+.btn-primary { background: #378ADD; color: #fff; }
+.btn-primary:hover { background: #2a6bc2; }
+.btn-sm { padding: 4px 10px; font-size: 12px; background: #f0f2f5; color: #444; border: 1px solid #d0d5dd; border-radius: 5px; cursor: pointer; }
+.btn-sm:hover { background: #e0e3e8; }
+
+/* Summary */
+.summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 16px; }
+.summary-card { background: #fff; border-radius: 10px; padding: 14px 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); text-align: center; }
+.summary-card .label { font-size: 11px; color: #888; margin-bottom: 4px; }
+.summary-card .value { font-size: 18px; font-weight: 700; }
+.summary-card .value.green { color: #1D9E75; }
+.summary-card .value.blue { color: #378ADD; }
+.summary-card .value.red { color: #E24B4A; }
+.summary-card .sub { font-size: 11px; color: #aaa; margin-top: 2px; }
+
+/* Chart */
+.chart-wrap { position: relative; }
+.chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.chart-legend { display: flex; gap: 14px; font-size: 12px; }
+.legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+.view-btns { display: flex; gap: 4px; }
+.view-btn { padding: 3px 10px; border-radius: 4px; border: 1px solid #d0d5dd; background: #fff; font-size: 12px; cursor: pointer; }
+.view-btn.active { background: #378ADD; color: #fff; border-color: #378ADD; }
+canvas#chart { width: 100%; display: block; }
+
+/* Table section */
+.table-section { margin-top: 16px; }
+.table-wrap { overflow-y: auto; max-height: 400px; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.data-table { width: 100%; border-collapse: collapse; background: #fff; font-size: 13px; }
+.data-table thead th { background: #1a1f2e; color: #c8d4e8; padding: 9px 10px; text-align: right; position: sticky; top: 0; z-index: 1; font-weight: 600; font-size: 12px; }
+.data-table thead th:first-child { text-align: left; }
+.data-table tbody tr:hover { background: #f6f8fc; }
+.data-table td { padding: 7px 10px; border-bottom: 1px solid #f0f2f5; text-align: right; }
+.data-table td:first-child { text-align: left; color: #555; font-size: 12px; }
+.data-table td.year-start { border-top: 2px solid #c8d4e8; }
+.data-table td.year-start:first-child { font-weight: 700; color: #222; }
+.actual-input { border: 1px solid transparent; border-radius: 4px; padding: 3px 6px; text-align: right; width: 100px; font-size: 13px; background: transparent; outline: none; }
+.actual-input:focus { border-color: #378ADD; background: #f0f6ff; }
+.actual-input.has-value { background: #f0fff8; border-color: #c0e8d8; }
+.diff.pos { color: #1D9E75; }
+.diff.neg { color: #E24B4A; }
+.badge { display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 3px; vertical-align: middle; margin-left: 4px; }
+.badge-future { background: #e8f0fe; color: #378ADD; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>NISA 試算シミュレーター</h1>
+  <span>複利計算・実績入力・グラフ表示</span>
+</div>
+
+<div class="container">
+  <div class="panels">
+    <!-- Settings -->
+    <div>
+      <div class="card">
+        <h2>基本設定</h2>
+        <div class="form-row">
+          <label>積立開始年月</label>
+          <input type="month" id="startMonth" value="2024-03">
+        </div>
+        <div class="form-row">
+          <label>積立終了年月</label>
+          <input type="month" id="endMonth" value="2034-12">
+        </div>
+        <div class="form-row">
+          <label>想定年利率</label>
+          <input type="number" id="annualRate" value="8" min="0" max="30" step="0.1">
+          <span class="unit">%</span>
+        </div>
+        <div class="form-row">
+          <label>表示期間</label>
+          <select id="viewYears">
+            <option value="5">5年</option>
+            <option value="10" selected>10年</option>
+            <option value="20">20年</option>
+            <option value="40">40年</option>
+            <option value="0">積立期間全体</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h2>積立プラン</h2>
+        <table class="plan-table">
+          <thead>
+            <tr>
+              <th>開始年月</th>
+              <th>終了年月</th>
+              <th>つみたて<br>NISA</th>
+              <th>成長<br>投資枠</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="planBody"></tbody>
+        </table>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button class="btn-sm" onclick="addPlan()">＋ 期間追加</button>
+          <button class="btn btn-primary" onclick="calculate()" style="margin-left:auto">再計算</button>
+        </div>
+        <div style="margin-top:10px;padding:8px 10px;background:#f8f9fc;border-radius:6px;font-size:12px;color:#666">
+          <span id="nisaTotal">NISA累計: −</span>
+          <span style="margin-left:12px;color:#aaa">上限 1,800万円</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="card chart-wrap">
+      <div class="chart-header">
+        <h2 style="margin:0">資産推移</h2>
+        <div style="display:flex;align-items:center;gap:16px">
+          <div class="chart-legend">
+            <span><span class="legend-dot" style="background:#9ba8ba"></span>元本</span>
+            <span><span class="legend-dot" style="background:#378ADD"></span>計算値</span>
+            <span><span class="legend-dot" style="background:#1D9E75"></span>実績値</span>
+          </div>
+          <div class="view-btns">
+            <button class="view-btn active" data-years="10" onclick="setView(10,this)">10年</button>
+            <button class="view-btn" data-years="20" onclick="setView(20,this)">20年</button>
+            <button class="view-btn" data-years="0" onclick="setView(0,this)">全期間</button>
+          </div>
+        </div>
+      </div>
+      <canvas id="chart" height="300"></canvas>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary">
+    <div class="summary-card">
+      <div class="label">元本合計</div>
+      <div class="value blue" id="sumPrincipal">−</div>
+      <div class="sub" id="sumPrincipalDate">−</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">計算値（現時点）</div>
+      <div class="value blue" id="sumCalc">−</div>
+      <div class="sub" id="sumCalcSub">−</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">実績値（最新）</div>
+      <div class="value green" id="sumActual">−</div>
+      <div class="sub" id="sumActualDate">−</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">実績利益</div>
+      <div class="value" id="sumProfit">−</div>
+      <div class="sub" id="sumProfitRate">−</div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-section">
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:14px 18px 0;display:flex;align-items:center;justify-content:space-between">
+        <h2 style="margin:0">月次データ</h2>
+        <label style="font-size:12px;color:#888;cursor:pointer">
+          <input type="checkbox" id="showFuture" onchange="renderTable()"> 将来月も表示
+        </label>
+      </div>
+      <div class="table-wrap" id="tableWrap">
+        <table class="data-table" id="dataTable">
+          <thead>
+            <tr>
+              <th style="text-align:left">年月</th>
+              <th>月次積立</th>
+              <th>元本合計</th>
+              <th>計算値</th>
+              <th>実績値</th>
+              <th>差額<br><span style="font-weight:400;font-size:10px">（実績−計算）</span></th>
+              <th>元本比<br><span style="font-weight:400;font-size:10px">（実績）</span></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+let simData = [];
+let chartViewYears = 10;
+const STORAGE_KEY = 'nisa_actual_values';
+
+function loadActual() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; }
+}
+function saveActual(key, val) {
+  const d = loadActual();
+  if (val === '' || val === null) delete d[key]; else d[key] = Number(val);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+}
+
+// ============================================================
+// Plan management
+// ============================================================
+let plans = [
+  { start: '2024-03', end: '2024-06', tsumitate: 30000, seicho: 0 },
+  { start: '2024-07', end: '2024-09', tsumitate: 30000, seicho: 30000 },
+  { start: '2024-10', end: '2025-02', tsumitate: 50000, seicho: 50000 },
+  { start: '2025-03', end: '2025-09', tsumitate: 80000, seicho: 20000 },
+  { start: '2025-10', end: '2034-12', tsumitate: 30000, seicho: 0 },
+];
+
+function renderPlans() {
+  const tb = document.getElementById('planBody');
+  tb.innerHTML = '';
+  plans.forEach((p, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="month" value="${p.start}" onchange="plans[${i}].start=this.value;updateNisaTotal()"></td>
+      <td><input type="month" value="${p.end}" onchange="plans[${i}].end=this.value;updateNisaTotal()"></td>
+      <td><input type="number" value="${p.tsumitate}" min="0" step="1000" onchange="plans[${i}].tsumitate=+this.value;updateNisaTotal()"></td>
+      <td><input type="number" value="${p.seicho}" min="0" step="1000" onchange="plans[${i}].seicho=+this.value;updateNisaTotal()"></td>
+      <td><button class="del-btn" onclick="removePlan(${i})">✕</button></td>
+    `;
+    tb.appendChild(tr);
+  });
+  updateNisaTotal();
+}
+
+function addPlan() {
+  const last = plans[plans.length - 1];
+  const nextStart = last ? nextMonth(last.end) : '2024-01';
+  plans.push({ start: nextStart, end: nextMonth(nextStart), tsumitate: 30000, seicho: 0 });
+  renderPlans();
+}
+
+function removePlan(i) {
+  if (plans.length <= 1) return;
+  plans.splice(i, 1);
+  renderPlans();
+}
+
+function nextMonth(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  if (m === 12) return `${y + 1}-01`;
+  return `${y}-${String(m + 1).padStart(2, '0')}`;
+}
+
+function updateNisaTotal() {
+  const start = document.getElementById('startMonth').value;
+  const end = document.getElementById('endMonth').value;
+  let total = 0;
+  eachMonth(start, end, (ym) => { total += getMonthlyInvest(ym); });
+  document.getElementById('nisaTotal').textContent =
+    'NISA累計: ' + Math.round(total).toLocaleString() + '円';
+  const el = document.getElementById('nisaTotal');
+  el.style.color = total > 18000000 ? '#E24B4A' : '#555';
+}
+
+// ============================================================
+// Simulation
+// ============================================================
+function getMonthlyInvest(ym) {
+  for (const p of plans) {
+    if (ym >= p.start && ym <= p.end) return (p.tsumitate || 0) + (p.seicho || 0);
+  }
+  return 0;
+}
+
+function eachMonth(startYM, endYM, fn) {
+  let [y, m] = startYM.split('-').map(Number);
+  const [ey, em] = endYM.split('-').map(Number);
+  while (y < ey || (y === ey && m <= em)) {
+    fn(`${y}-${String(m).padStart(2, '0')}`);
+    m++; if (m > 12) { m = 1; y++; }
+  }
+}
+
+function simulate() {
+  const start = document.getElementById('startMonth').value;
+  const end = document.getElementById('endMonth').value;
+  const rate = parseFloat(document.getElementById('annualRate').value) / 100 / 12;
+
+  simData = [];
+  let calc = 0, principal = 0;
+  let prevYM = null;
+
+  eachMonth(start, end, (ym) => {
+    const invest = getMonthlyInvest(ym);
+    calc = calc * (1 + rate) + invest;
+    principal += invest;
+    const isNewYear = !prevYM || ym.split('-')[0] !== prevYM.split('-')[0];
+    simData.push({ ym, invest, calc, principal, isNewYear });
+    prevYM = ym;
+  });
+}
+
+// ============================================================
+// Summary
+// ============================================================
+function updateSummary() {
+  const actual = loadActual();
+  const now = new Date();
+  const nowYM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+
+  // Current month calc
+  const cur = simData.find(d => d.ym === nowYM) || simData[simData.length - 1];
+  if (cur) {
+    document.getElementById('sumPrincipal').textContent = formatMan(cur.principal);
+    document.getElementById('sumPrincipalDate').textContent = cur.ym;
+    document.getElementById('sumCalc').textContent = formatMan(cur.calc);
+    document.getElementById('sumCalcSub').textContent = `利益 ${formatMan(cur.calc - cur.principal)}`;
+  }
+
+  // Latest actual
+  const actualEntries = simData
+    .filter(d => actual[d.ym] != null)
+    .map(d => ({ ym: d.ym, val: actual[d.ym], principal: d.principal }));
+  if (actualEntries.length > 0) {
+    const latest = actualEntries[actualEntries.length - 1];
+    const profit = latest.val - latest.principal;
+    const profitRate = latest.principal > 0 ? (latest.val / latest.principal * 100).toFixed(1) : 0;
+    document.getElementById('sumActual').textContent = formatMan(latest.val);
+    document.getElementById('sumActualDate').textContent = latest.ym;
+    document.getElementById('sumProfit').textContent = formatMan(profit);
+    document.getElementById('sumProfit').className = 'value ' + (profit >= 0 ? 'green' : 'red');
+    document.getElementById('sumProfitRate').textContent = `元本比 ${profitRate}%`;
+  }
+}
+
+// ============================================================
+// Chart
+// ============================================================
+function setView(years, btn) {
+  chartViewYears = years;
+  document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderChart();
+}
+
+function renderChart() {
+  const canvas = document.getElementById('chart');
+  const W = canvas.offsetWidth;
+  const H = canvas.offsetHeight || 300;
+  canvas.width = W * devicePixelRatio;
+  canvas.height = H * devicePixelRatio;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+
+  if (simData.length === 0) return;
+
+  const actual = loadActual();
+  const now = new Date();
+  const nowYM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+
+  // Filter data by view
+  let viewData = simData;
+  if (chartViewYears > 0) {
+    const startYear = parseInt(simData[0].ym);
+    viewData = simData.filter(d => parseInt(d.ym) < startYear + chartViewYears);
+  }
+
+  const pad = { top: 20, right: 30, bottom: 40, left: 70 };
+  const cw = W - pad.left - pad.right;
+  const ch = H - pad.top - pad.bottom;
+
+  // Y scale
+  const maxCalc = Math.max(...viewData.map(d => d.calc));
+  const maxActual = Math.max(...viewData.map(d => actual[d.ym] ?? 0));
+  const yMax = Math.max(maxCalc, maxActual) * 1.05;
+  const yTick = niceStep(yMax, 5);
+
+  const xScale = i => pad.left + (i / (viewData.length - 1)) * cw;
+  const yScale = v => pad.top + ch - (v / yMax) * ch;
+
+  // Grid
+  ctx.strokeStyle = '#e8eaf0';
+  ctx.lineWidth = 1;
+  for (let v = 0; v <= yMax; v += yTick) {
+    const y = yScale(v);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cw, y); ctx.stroke();
+    ctx.fillStyle = '#aaa'; ctx.font = '11px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(formatMan(v, true), pad.left - 6, y + 4);
+  }
+
+  // X axis labels
+  ctx.fillStyle = '#aaa'; ctx.font = '11px sans-serif'; ctx.textAlign = 'center';
+  const step = Math.max(1, Math.floor(viewData.length / 8));
+  viewData.forEach((d, i) => {
+    if (i % step === 0 || i === viewData.length - 1) {
+      const x = xScale(i);
+      ctx.beginPath(); ctx.moveTo(x, pad.top + ch); ctx.lineTo(x, pad.top + ch + 4);
+      ctx.strokeStyle = '#d0d5dd'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#aaa';
+      ctx.fillText(d.ym.replace('-', '/'), x, pad.top + ch + 15);
+    }
+  });
+
+  // "Now" line
+  const nowIdx = viewData.findIndex(d => d.ym >= nowYM);
+  if (nowIdx > 0) {
+    const x = xScale(nowIdx);
+    ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.moveTo(x, pad.top); ctx.lineTo(x, pad.top + ch); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#bbb'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('現在', x, pad.top + 12);
+  }
+
+  function drawLine(getData, color, dashed) {
+    ctx.beginPath();
+    ctx.strokeStyle = color; ctx.lineWidth = 2;
+    if (dashed) ctx.setLineDash([5, 4]); else ctx.setLineDash([]);
+    let started = false;
+    viewData.forEach((d, i) => {
+      const v = getData(d);
+      if (v == null) return;
+      const x = xScale(i), y = yScale(v);
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Principal
+  drawLine(d => d.principal, '#9ba8ba', false);
+  // Calc (future dashed)
+  ctx.beginPath(); ctx.strokeStyle = '#378ADD'; ctx.lineWidth = 2;
+  viewData.forEach((d, i) => {
+    const x = xScale(i), y = yScale(d.calc);
+    const isFuture = d.ym > nowYM;
+    if (i === 0) { ctx.moveTo(x, y); return; }
+    if (isFuture && !ctx._dashSet) {
+      ctx.stroke(); ctx.beginPath(); ctx.setLineDash([5, 4]);
+      ctx.strokeStyle = '#378ADD'; ctx.lineWidth = 1.5;
+      ctx.moveTo(xScale(i - 1), yScale(viewData[i - 1].calc));
+      ctx._dashSet = true;
+    }
+    ctx.lineTo(x, y);
+  });
+  ctx.stroke(); ctx.setLineDash([]); ctx._dashSet = false;
+
+  // Actual
+  drawLine(d => actual[d.ym] ?? null, '#1D9E75', false);
+
+  // Actual dots
+  viewData.forEach((d, i) => {
+    if (actual[d.ym] == null) return;
+    const x = xScale(i), y = yScale(actual[d.ym]);
+    ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#1D9E75'; ctx.fill();
+  });
+}
+
+function niceStep(max, count) {
+  const raw = max / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const nice = [1, 2, 2.5, 5, 10].map(f => f * mag);
+  return nice.find(v => max / v <= count + 1) || nice[nice.length - 1];
+}
+
+// ============================================================
+// Table
+// ============================================================
+function renderTable() {
+  const actual = loadActual();
+  const showFuture = document.getElementById('showFuture').checked;
+  const now = new Date();
+  const nowYM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+
+  const tb = document.getElementById('tableBody');
+  tb.innerHTML = '';
+
+  const rows = showFuture ? simData : simData.filter(d => d.ym <= nowYM);
+
+  rows.forEach(d => {
+    const isFuture = d.ym > nowYM;
+    const av = actual[d.ym];
+    const diff = av != null ? av - d.calc : null;
+    const profitRate = av != null && d.principal > 0 ? (av / d.principal * 100).toFixed(1) : null;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="${d.isNewYear ? 'year-start' : ''}">${d.ym}${isFuture ? '<span class="badge badge-future">予測</span>' : ''}</td>
+      <td class="${d.isNewYear ? 'year-start' : ''}">${d.invest > 0 ? d.invest.toLocaleString() : '−'}</td>
+      <td class="${d.isNewYear ? 'year-start' : ''}">${Math.round(d.principal).toLocaleString()}</td>
+      <td class="${d.isNewYear ? 'year-start' : ''}">${Math.round(d.calc).toLocaleString()}</td>
+      <td class="${d.isNewYear ? 'year-start' : ''}">
+        <input class="actual-input ${av != null ? 'has-value' : ''}" type="number"
+          value="${av != null ? av : ''}" placeholder="入力"
+          data-ym="${d.ym}"
+          onchange="onActualChange(this)"
+          onblur="onActualChange(this)">
+      </td>
+      <td class="${d.isNewYear ? 'year-start' : ''} diff ${diff == null ? '' : diff >= 0 ? 'pos' : 'neg'}">
+        ${diff != null ? (diff >= 0 ? '+' : '') + Math.round(diff).toLocaleString() : '−'}
+      </td>
+      <td class="${d.isNewYear ? 'year-start' : ''}">
+        ${profitRate != null ? profitRate + '%' : '−'}
+      </td>
+    `;
+    tb.appendChild(tr);
+  });
+}
+
+function onActualChange(input) {
+  const ym = input.dataset.ym;
+  const val = input.value.trim();
+  saveActual(ym, val === '' ? null : parseFloat(val.replace(/,/g, '')));
+  input.classList.toggle('has-value', val !== '');
+  updateSummary();
+  renderChart();
+  renderTable();
+}
+
+// ============================================================
+// Helpers
+// ============================================================
+function formatMan(v, short) {
+  if (v == null || isNaN(v)) return '−';
+  const abs = Math.abs(v);
+  const sign = v < 0 ? '−' : '';
+  if (abs >= 1e8) return sign + (abs / 1e8).toFixed(1) + '億円';
+  if (abs >= 10000) return sign + Math.round(abs / 10000).toLocaleString() + '万円';
+  return sign + Math.round(abs).toLocaleString() + '円';
+}
+
+// ============================================================
+// Main
+// ============================================================
+function calculate() {
+  simulate();
+  updateSummary();
+  renderChart();
+  renderTable();
+  updateNisaTotal();
+}
+
+document.getElementById('startMonth').addEventListener('change', updateNisaTotal);
+document.getElementById('endMonth').addEventListener('change', updateNisaTotal);
+document.getElementById('annualRate').addEventListener('change', () => {});
+
+window.addEventListener('resize', () => { if (simData.length > 0) renderChart(); });
+
+renderPlans();
+calculate();
+</script>
+</body>
+</html>
