@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数独</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #f0f4f8;
+    color: #2d3748;
+    font-family: 'Segoe UI', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 8px;
+  }
+
+  h1 {
+    font-size: 1.3rem;
+    margin-bottom: 6px;
+    color: #2b6cb0;
+    letter-spacing: 4px;
+  }
+
+  #controls {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  select, button {
+    background: #fff;
+    color: #2d3748;
+    border: 1px solid #b0c4d8;
+    border-radius: 5px;
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  button:hover { background: #bee3f8; }
+  button.active { background: #bee3f8; border-color: #2b6cb0; }
+
+  #info-bar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 6px;
+    font-size: 0.8rem;
+    color: #4a5568;
+  }
+
+  #timer { font-weight: bold; color: #2b6cb0; }
+
+  #board-wrap {
+    position: relative;
+  }
+
+  #board {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 0;
+    border: 2px solid #2b6cb0;
+    background: #2b6cb0;
+  }
+
+  .cell {
+    width: 42px;
+    height: 42px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    border: 1px solid #cbd5e0;
+    transition: background 0.1s;
+  }
+
+  /* 3x3 box borders */
+  .cell:nth-child(3n) { border-right: 2px solid #2b6cb0; }
+  .cell:nth-child(9n) { border-right: none; }
+  .cell[data-row="2"] { border-bottom: 2px solid #2b6cb0; }
+  .cell[data-row="5"] { border-bottom: 2px solid #2b6cb0; }
+
+  .cell.given { color: #2b6cb0; font-weight: bold; cursor: default; }
+  .cell.selected { background: #bee3f8 !important; }
+  .cell.highlighted { background: #ebf8ff; }
+  .cell.same-num { background: #cce8f7; }
+  .cell.correct-flash { animation: flash-green 0.4s; }
+
+  @keyframes flash-green {
+    0% { background: #68d391; }
+    100% { background: #fff; }
+  }
+
+  .notes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    width: 100%;
+    height: 100%;
+    padding: 1px;
+  }
+
+  .note-cell {
+    font-size: 0.45rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #718096;
+  }
+
+  #numpad {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 5px;
+    margin-top: 6px;
+  }
+
+  .num-btn {
+    width: 42px;
+    height: 36px;
+    font-size: 1.15rem;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .num-btn.erase { font-size: 0.8rem; }
+  .num-btn.used { opacity: 0.3; pointer-events: none; }
+
+  #mode-btns {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  #message {
+    margin-top: 6px;
+    font-size: 0.95rem;
+    min-height: 1.3em;
+    text-align: center;
+  }
+
+  #message.win { color: #1D9E75; font-weight: bold; font-size: 1.1rem; }
+  #message.lose { color: #e07a7a; }
+
+  #overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(240,244,248,0.90);
+    align-items: center;
+    justify-content: center;
+    font-size: 1.6rem;
+    color: #1D9E75;
+    font-weight: bold;
+    border-radius: 2px;
+    letter-spacing: 2px;
+  }
+
+  #overlay.show { display: flex; }
+</style>
+</head>
+<body>
+
+<h1>数　独</h1>
+
+<div id="controls">
+  <select id="difficulty">
+    <option value="35">やさしい</option>
+    <option value="45" selected>ふつう</option>
+    <option value="52">むずかしい</option>
+    <option value="58">地獄</option>
+  </select>
+  <button id="btn-new">新しいゲーム</button>
+  <button id="btn-undo">↩ 戻る</button>
+  <button id="btn-hint">ヒント</button>
+  <button id="btn-check">答え合わせ</button>
+</div>
+
+<div id="info-bar">
+  <span>⏱ <span id="timer">0:00</span></span>
+</div>
+
+<div id="board-wrap">
+  <div id="board"></div>
+  <div id="overlay"></div>
+</div>
+
+<div id="numpad"></div>
+
+<div id="mode-btns">
+  <button id="btn-note" onclick="toggleNoteMode()">メモ：OFF</button>
+</div>
+
+<div id="message"></div>
+
+<script>
+// ─── Sudoku Generator ───────────────────────────────────────────
+function generateSolution() {
+  const grid = Array.from({length: 9}, () => Array(9).fill(0));
+  solve(grid);
+  return grid;
+}
+
+function solve(grid) {
+  const empty = findEmpty(grid);
+  if (!empty) return true;
+  const [r, c] = empty;
+  const nums = shuffle([1,2,3,4,5,6,7,8,9]);
+  for (const n of nums) {
+    if (isValid(grid, r, c, n)) {
+      grid[r][c] = n;
+      if (solve(grid)) return true;
+      grid[r][c] = 0;
+    }
+  }
+  return false;
+}
+
+function findEmpty(grid) {
+  for (let r = 0; r < 9; r++)
+    for (let c = 0; c < 9; c++)
+      if (grid[r][c] === 0) return [r, c];
+  return null;
+}
+
+function isValid(grid, r, c, n) {
+  if (grid[r].includes(n)) return false;
+  if (grid.some(row => row[c] === n)) return false;
+  const br = Math.floor(r/3)*3, bc = Math.floor(c/3)*3;
+  for (let i = 0; i < 3; i++)
+    for (let j = 0; j < 3; j++)
+      if (grid[br+i][bc+j] === n) return false;
+  return true;
+}
+
+function shuffle(arr) {
+  for (let i = arr.length-1; i > 0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function countSolutions(grid, limit = 2) {
+  const empty = findEmpty(grid);
+  if (!empty) return 1;
+  const [r, c] = empty;
+  let count = 0;
+  for (let n = 1; n <= 9; n++) {
+    if (isValid(grid, r, c, n)) {
+      grid[r][c] = n;
+      count += countSolutions(grid, limit);
+      grid[r][c] = 0;
+      if (count >= limit) return count;
+    }
+  }
+  return count;
+}
+
+function createPuzzle(solution, removeCount) {
+  const puzzle = solution.map(r => [...r]);
+  const cells = shuffle([...Array(81).keys()]);
+  let removed = 0;
+  for (const idx of cells) {
+    if (removed >= removeCount) break;
+    const r = Math.floor(idx/9), c = idx%9;
+    const backup = puzzle[r][c];
+    puzzle[r][c] = 0;
+    const copy = puzzle.map(row => [...row]);
+    if (countSolutions(copy) === 1) {
+      removed++;
+    } else {
+      puzzle[r][c] = backup;
+    }
+  }
+  return puzzle;
+}
+
+// ─── State ─────────────────────────────────────────────────────
+let solution = [], puzzle = [], userGrid = [], notes = [];
+let selected = null;
+let noteMode = false;
+let timerInterval = null, seconds = 0;
+let gameOver = false;
+let history = [];
+
+// ─── Init ───────────────────────────────────────────────────────
+function newGame() {
+  gameOver = false;
+  history = [];
+  selected = null;
+  noteMode = false;
+  document.getElementById('btn-note').textContent = 'メモ：OFF';
+
+  document.getElementById('message').textContent = '';
+  document.getElementById('message').className = '';
+  document.getElementById('overlay').className = '';
+  document.getElementById('overlay').textContent = '';
+
+  const removeCount = parseInt(document.getElementById('difficulty').value);
+
+  solution = generateSolution();
+  puzzle = createPuzzle(solution, removeCount);
+  userGrid = puzzle.map(r => [...r]);
+  notes = Array.from({length:9}, () => Array.from({length:9}, () => new Set()));
+
+  resetTimer();
+  startTimer();
+  renderBoard();
+}
+
+// ─── Render ─────────────────────────────────────────────────────
+function renderBoard() {
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  for (let r = 0; r < 9; r++) {
+    for (let c = 0; c < 9; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.r = r;
+      cell.dataset.c = c;
+      cell.dataset.row = r;
+
+      if (puzzle[r][c] !== 0) {
+        cell.classList.add('given');
+        cell.textContent = puzzle[r][c];
+      } else if (userGrid[r][c] !== 0) {
+        cell.textContent = userGrid[r][c];
+      } else if (notes[r][c].size > 0) {
+        const noteDiv = document.createElement('div');
+        noteDiv.className = 'notes';
+        for (let n = 1; n <= 9; n++) {
+          const nc = document.createElement('div');
+          nc.className = 'note-cell';
+          nc.textContent = notes[r][c].has(n) ? n : '';
+          noteDiv.appendChild(nc);
+        }
+        cell.appendChild(noteDiv);
+      }
+
+      cell.addEventListener('click', () => selectCell(r, c));
+      board.appendChild(cell);
+    }
+  }
+  applyHighlight();
+  updateNumpad();
+}
+
+function updateNumpad() {
+  const counts = Array(10).fill(0);
+  for (let r = 0; r < 9; r++)
+    for (let c = 0; c < 9; c++)
+      if (userGrid[r][c]) counts[userGrid[r][c]]++;
+  document.querySelectorAll('.num-btn[data-n]').forEach(btn => {
+    const n = +btn.dataset.n;
+    btn.classList.toggle('used', counts[n] >= 9);
+  });
+}
+
+function applyHighlight() {
+  const cells = document.querySelectorAll('.cell');
+  cells.forEach(cell => {
+    cell.classList.remove('selected', 'highlighted', 'same-num');
+  });
+  if (selected === null) return;
+  const [sr, sc] = selected;
+  const selVal = userGrid[sr][sc] || puzzle[sr][sc];
+
+  cells.forEach(cell => {
+    const r = +cell.dataset.r, c = +cell.dataset.c;
+    if (r === sr && c === sc) {
+      cell.classList.add('selected');
+    } else if (
+      r === sr || c === sc ||
+      (Math.floor(r/3) === Math.floor(sr/3) && Math.floor(c/3) === Math.floor(sc/3))
+    ) {
+      cell.classList.add('highlighted');
+    }
+    if (selVal && (userGrid[r][c] === selVal || puzzle[r][c] === selVal)) {
+      if (!(r === sr && c === sc)) cell.classList.add('same-num');
+    }
+  });
+}
+
+// ─── Actions ────────────────────────────────────────────────────
+function selectCell(r, c) {
+  if (gameOver) return;
+  selected = [r, c];
+  applyHighlight();
+}
+
+function inputNumber(n) {
+  if (gameOver || selected === null) return;
+  const [r, c] = selected;
+  if (puzzle[r][c] !== 0) return;
+
+  if (noteMode) {
+    if (userGrid[r][c] !== 0) return;
+    if (notes[r][c].has(n)) notes[r][c].delete(n);
+    else notes[r][c].add(n);
+    renderBoard();
+    return;
+  }
+
+  if (n === 0) {
+    pushHistory(r, c);
+    userGrid[r][c] = 0;
+    notes[r][c].clear();
+    renderBoard();
+    return;
+  }
+
+  pushHistory(r, c);
+  notes[r][c].clear();
+  userGrid[r][c] = n;
+
+
+  renderBoard();
+  checkWin();
+}
+
+function eraseCell() {
+  if (gameOver || selected === null) return;
+  const [r, c] = selected;
+  if (puzzle[r][c] !== 0) return;
+  pushHistory(r, c);
+  userGrid[r][c] = 0;
+  notes[r][c].clear();
+  renderBoard();
+}
+
+function pushHistory(r, c) {
+  history.push({ r, c, val: userGrid[r][c], notes: new Set(notes[r][c]) });
+}
+
+function undoMove() {
+  if (gameOver || history.length === 0) return;
+  const { r, c, val, notes: prevNotes } = history.pop();
+  userGrid[r][c] = val;
+  notes[r][c] = new Set(prevNotes);
+  selected = [r, c];
+  renderBoard();
+}
+
+function toggleNoteMode() {
+  noteMode = !noteMode;
+  document.getElementById('btn-note').textContent = `メモ：${noteMode ? 'ON' : 'OFF'}`;
+}
+
+function hintCell() {
+  if (gameOver) return;
+  let target = null;
+  if (selected) {
+    const [r, c] = selected;
+    if (puzzle[r][c] === 0 && userGrid[r][c] !== solution[r][c]) target = selected;
+  }
+  if (!target) {
+    for (let r = 0; r < 9; r++)
+      for (let c = 0; c < 9; c++)
+        if (puzzle[r][c] === 0 && userGrid[r][c] !== solution[r][c]) { target = [r, c]; break; }
+        else if (target) break;
+  }
+  if (!target) return;
+  const [r, c] = target;
+  userGrid[r][c] = solution[r][c];
+  notes[r][c].clear();
+  selected = [r, c];
+  renderBoard();
+  checkWin();
+}
+
+function checkAll() {
+  let hasError = false;
+  for (let r = 0; r < 9; r++)
+    for (let c = 0; c < 9; c++)
+      if (puzzle[r][c] === 0 && userGrid[r][c] !== 0 && userGrid[r][c] !== solution[r][c])
+        hasError = true;
+  const msg = document.getElementById('message');
+  if (hasError) { msg.textContent = '間違いがあります！'; msg.className = 'lose'; }
+  else { msg.textContent = '今のところ正解です！'; msg.className = ''; }
+  setTimeout(() => { if (msg.className !== 'win') msg.textContent = ''; }, 2000);
+}
+
+function checkWin() {
+  for (let r = 0; r < 9; r++)
+    for (let c = 0; c < 9; c++)
+      if (userGrid[r][c] !== solution[r][c]) return;
+  gameOver = true;
+  stopTimer();
+  showOverlay('　完成！　', '#1D9E75');
+}
+
+function showOverlay(text, color) {
+  const ov = document.getElementById('overlay');
+  ov.textContent = text;
+  ov.style.color = color;
+  ov.classList.add('show');
+}
+
+// ─── Timer ──────────────────────────────────────────────────────
+function resetTimer() {
+  stopTimer();
+  seconds = 0;
+  document.getElementById('timer').textContent = '0:00';
+}
+
+function startTimer() {
+  timerInterval = setInterval(() => {
+    seconds++;
+    const m = Math.floor(seconds/60), s = seconds%60;
+    document.getElementById('timer').textContent = `${m}:${s.toString().padStart(2,'0')}`;
+  }, 1000);
+}
+
+function stopTimer() {
+  clearInterval(timerInterval);
+}
+
+// ─── Numpad UI ──────────────────────────────────────────────────
+function buildNumpad() {
+  const pad = document.getElementById('numpad');
+  for (let n = 1; n <= 9; n++) {
+    const btn = document.createElement('button');
+    btn.className = 'num-btn';
+    btn.dataset.n = n;
+    btn.textContent = n;
+    btn.addEventListener('click', () => inputNumber(n));
+    pad.appendChild(btn);
+  }
+  const eraseBtn = document.createElement('button');
+  eraseBtn.className = 'num-btn erase';
+  eraseBtn.textContent = '消去';
+  eraseBtn.addEventListener('click', eraseCell);
+  pad.appendChild(eraseBtn);
+}
+
+// ─── Keyboard ───────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (gameOver) return;
+  if (e.key >= '1' && e.key <= '9') { inputNumber(parseInt(e.key)); return; }
+  if (e.key === '0' || e.key === 'Backspace' || e.key === 'Delete') { eraseCell(); return; }
+  if (!selected) return;
+  const [r, c] = selected;
+  const moves = { ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1] };
+  if (moves[e.key]) {
+    e.preventDefault();
+    const [dr, dc] = moves[e.key];
+    selectCell(Math.max(0,Math.min(8,r+dr)), Math.max(0,Math.min(8,c+dc)));
+  }
+});
+
+// ─── Boot ────────────────────────────────────────────────────────
+document.getElementById('btn-new').addEventListener('click', newGame);
+document.getElementById('btn-undo').addEventListener('click', undoMove);
+document.getElementById('btn-hint').addEventListener('click', hintCell);
+document.getElementById('btn-check').addEventListener('click', checkAll);
+buildNumpad();
+newGame();
+</script>
+</body>
+</html>
