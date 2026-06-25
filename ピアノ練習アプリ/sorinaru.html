@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>宗理成夫の野望</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000510;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:'MS Gothic','ＭＳ ゴシック',monospace;color:#dde8ff;}
+#game{width:660px;background:#0a1628;border:2px solid #5588cc;box-shadow:0 0 30px rgba(85,136,204,0.3);}
+
+/* HEADER */
+#hdr{background:#001144;border-bottom:2px solid #5588cc;padding:8px 14px;display:flex;justify-content:space-between;align-items:center;font-size:13px;}
+.hdr-chapter{color:#ffe44d;font-weight:bold;font-size:15px;}
+.hdr-week{color:#aaccff;margin-left:12px;}
+.ap-dot{display:inline-block;width:11px;height:11px;border-radius:50%;border:1px solid #5588cc;margin:0 2px;vertical-align:middle;}
+.ap-dot.on{background:#ffe44d;}
+
+/* MAIN */
+#main{display:flex;height:250px;}
+
+/* SCENE */
+#scene{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;position:relative;overflow:hidden;}
+#scene-bg{position:absolute;inset:0;transition:background .5s;}
+#scene-cnt{position:relative;z-index:1;text-align:center;}
+#scene-icon{font-size:60px;margin-bottom:6px;}
+#scene-ttl{color:#ffe44d;font-size:14px;font-weight:bold;}
+#scene-sub{color:#aaccff;font-size:11px;margin-top:3px;}
+#companions{position:absolute;bottom:8px;left:8px;display:flex;gap:5px;}
+.chip{background:#001a44;border:1px solid #5588cc;border-radius:10px;padding:2px 8px;font-size:10px;color:#aaddff;}
+
+/* PARAMS */
+#params{width:185px;background:#001144;border-left:2px solid #5588cc;padding:10px 9px;}
+#params h3{color:#ffe44d;font-size:13px;border-bottom:1px solid #334466;padding-bottom:4px;margin-bottom:7px;}
+.pr{margin-bottom:5px;}
+.pl{font-size:10px;color:#8899bb;display:flex;justify-content:space-between;margin-bottom:2px;}
+.pl span{color:#dde8ff;}
+.pb{height:5px;background:#001a44;border:1px solid #334466;border-radius:3px;overflow:hidden;}
+.pf{height:100%;border-radius:3px;transition:width .4s;}
+.f-st{background:#ff6633;}.f-fm{background:#5588cc;}.f-sp{background:#22cc44;}.f-po{background:#cc88ff;}.f-sn{background:#1da1f2;}
+#gold{margin-top:7px;color:#ffdd44;font-size:12px;}
+#rival{margin-top:6px;padding-top:5px;border-top:1px solid #334466;font-size:10px;color:#aaa;line-height:1.6;}
+
+/* LOG */
+#log{background:#050e1e;border-top:2px solid #334466;border-bottom:2px solid #334466;height:88px;overflow-y:auto;padding:6px 10px;}
+.le{font-size:11px;padding:1px 0;color:#aaccff;border-bottom:1px solid #0d1e33;}
+.le.pos{color:#55ee77;}.le.neg{color:#ff7766;}.le.evt{color:#ffe44d;}.le.sys{color:#fff;font-weight:bold;}
+#log::-webkit-scrollbar{width:3px;}
+#log::-webkit-scrollbar-thumb{background:#334466;}
+
+/* ACTIONS */
+#act-area{padding:8px 10px;min-height:110px;}
+#act-label{color:#8899bb;font-size:11px;margin-bottom:5px;}
+#act-btns{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;}
+.ab{background:#001a44;border:1px solid #334466;color:#aaccff;padding:5px 3px;cursor:pointer;font-family:inherit;font-size:10px;text-align:center;line-height:1.3;transition:background .1s;}
+.ab:hover{background:#002266;border-color:#5588cc;color:#fff;}
+.ab:disabled{background:#080e1a;border-color:#1a2233;color:#2a3344;cursor:not-allowed;}
+.ab .bi{font-size:17px;display:block;}
+.ab .bc{font-size:8px;color:#445566;margin-top:1px;}
+.ab.sns{border-color:#1a4466;}
+.ab.hvy{border-color:#442200;}
+.next-btn{grid-column:1/-1;padding:10px;font-size:14px;color:#ffe44d;border-color:#ffe44d;background:#001a44;}
+.next-btn:hover{background:#002244;}
+
+/* EVENT PANEL */
+#evpanel{display:none;padding:10px 12px;background:#080d1a;border-top:2px solid #ffe44d;}
+#evpanel.show{display:block;}
+#ev-ttl{color:#ffe44d;font-size:15px;font-weight:bold;margin-bottom:5px;}
+#ev-desc{color:#dde8ff;font-size:12px;margin-bottom:8px;line-height:1.6;}
+#ev-choices{display:flex;gap:5px;flex-wrap:wrap;}
+.eb{background:#001144;border:2px solid #5588cc;color:#dde8ff;padding:7px 10px;cursor:pointer;font-family:inherit;font-size:11px;line-height:1.4;}
+.eb:hover{background:#002266;}
+.eb.danger{border-color:#cc2222;}.eb.safe{border-color:#22cc44;}
+
+/* OVERLAY */
+#ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100;align-items:center;justify-content:center;}
+#ov.show{display:flex;}
+#ovbox{background:#001144;border:2px solid #5588cc;padding:26px 32px;max-width:420px;text-align:center;}
+#ovbox h2{color:#ffe44d;font-size:22px;margin-bottom:10px;}
+#ovbox p{color:#dde8ff;font-size:13px;margin-bottom:14px;line-height:1.7;}
+#ovbox button{background:#001a44;border:2px solid #5588cc;color:#fff;padding:9px 20px;cursor:pointer;font-family:inherit;font-size:13px;margin:3px;}
+#ovbox button:hover{background:#002266;}
+
+/* TITLE */
+#title{text-align:center;padding:40px 30px;}
+#title h1{color:#ffe44d;font-size:30px;text-shadow:0 0 20px rgba(255,228,77,.5);margin-bottom:3px;}
+#title .sub{color:#5588cc;font-size:13px;margin-bottom:6px;}
+#title .tag{color:#445566;font-size:11px;margin-bottom:28px;}
+#title .go{background:#001a44;border:2px solid #5588cc;color:#ffe44d;padding:11px 34px;font-size:15px;cursor:pointer;font-family:inherit;letter-spacing:2px;}
+#title .go:hover{background:#002266;}
+
+/* STORY MODE (visual novel) */
+#story{display:none;position:relative;width:100%;cursor:pointer;user-select:none;}
+#story.show{display:block;}
+#story-bg{height:280px;position:relative;overflow:hidden;transition:background 0.6s;}
+#story-location{position:absolute;top:12px;left:14px;background:rgba(0,5,20,.75);border:1px solid #5588cc;padding:3px 10px;font-size:11px;color:#aaccff;letter-spacing:1px;}
+#story-chapter{position:absolute;top:12px;right:14px;background:rgba(255,228,77,.15);border:1px solid #ffe44d;padding:3px 10px;font-size:10px;color:#ffe44d;}
+#story-scene-icon{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);font-size:72px;opacity:.85;text-shadow:0 4px 20px rgba(0,0,0,.8);}
+#story-textbox{background:rgba(0,5,20,.92);border-top:2px solid #334466;padding:16px 18px 14px;}
+#story-speaker{color:#ffe44d;font-size:13px;font-weight:bold;margin-bottom:6px;min-height:18px;}
+#story-body{color:#dde8ff;font-size:13px;line-height:2;min-height:80px;}
+#story-body .narr{color:#99aacc;font-style:italic;}
+#story-body .dial{color:#ffffff;}
+#story-body .think{color:#aabbdd;font-style:italic;}
+#story-body .em{color:#ffe44d;}
+#story-next{text-align:right;margin-top:8px;font-size:11px;color:#5588cc;}
+#story-next span{animation:blink 1s infinite;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:.3;}}
+#story-progress{display:flex;gap:3px;justify-content:center;padding:6px 0;background:#000a1a;border-top:1px solid #1a2a3a;}
+.sp-dot{width:6px;height:6px;border-radius:50%;background:#1a2a3a;}
+.sp-dot.done{background:#5588cc;}
+.sp-dot.cur{background:#ffe44d;}
+</style>
+</head>
+<body>
+<div id="game">
+
+<!-- TITLE -->
+<div id="title">
+  <h1>宗理成夫の野望</h1>
+  <div class="sub">第1章：市議選への道</div>
+  <div class="tag">〜しがないサラリーマンが総理を目指す〜</div>
+  <div style="font-size:48px;margin:18px 0;">🏛️</div>
+  <div style="color:#445566;font-size:11px;margin-bottom:22px;">
+    8週間で市議会議員選挙に勝利せよ！<br>
+    各ボタンをクリックして行動を選択
+  </div>
+  <button class="go" onclick="startGame()">ゲームスタート</button>
+</div>
+
+<!-- STORY MODE -->
+<div id="story">
+  <div id="story-bg">
+    <div id="story-location"></div>
+    <div id="story-chapter">第1章：市議選への道</div>
+    <div id="story-scene-icon"></div>
+  </div>
+  <div id="story-textbox">
+    <div id="story-speaker"></div>
+    <div id="story-body"></div>
+    <div id="story-next"><span>▼ クリックで次へ</span></div>
+  </div>
+  <div id="story-progress"></div>
+</div>
+
+<!-- GAME SCREEN -->
+<div id="gscreen" style="display:none;">
+  <div id="hdr">
+    <div><span class="hdr-chapter">第1章：市議選</span><span class="hdr-week" id="hweek"></span></div>
+    <div id="hap"></div>
+  </div>
+  <div id="main">
+    <div id="scene">
+      <div id="scene-bg"></div>
+      <div id="scene-cnt">
+        <div id="scene-icon">🏙️</div>
+        <div id="scene-ttl">あさひ市</div>
+        <div id="scene-sub">今日も一日、頑張ろう</div>
+      </div>
+      <div id="companions"></div>
+    </div>
+    <div id="params">
+      <h3>宗理 成夫</h3>
+      <div class="pr"><div class="pl">体力 <span id="v-st"></span></div><div class="pb"><div class="pf f-st" id="b-st"></div></div></div>
+      <div class="pr"><div class="pl">知名度 <span id="v-fm"></span></div><div class="pb"><div class="pf f-fm" id="b-fm"></div></div></div>
+      <div class="pr"><div class="pl">支持率 <span id="v-sp"></span></div><div class="pb"><div class="pf f-sp" id="b-sp"></div></div></div>
+      <div class="pr"><div class="pl">政策力 <span id="v-po"></span></div><div class="pb"><div class="pf f-po" id="b-po"></div></div></div>
+      <div class="pr"><div class="pl">SNS影響 <span id="v-sn"></span></div><div class="pb"><div class="pf f-sn" id="b-sn"></div></div></div>
+      <div id="gold"></div>
+      <div id="rival"></div>
+    </div>
+  </div>
+  <div id="log"></div>
+  <div id="act-area">
+    <div id="act-label"></div>
+    <div id="act-btns"></div>
+  </div>
+  <div id="evpanel">
+    <div id="ev-ttl"></div>
+    <div id="ev-desc"></div>
+    <div id="ev-choices"></div>
+  </div>
+</div>
+
+</div><!-- /game -->
+
+<div id="ov"><div id="ovbox"><h2 id="ov-ttl"></h2><p id="ov-body"></p><div id="ov-btns"></div></div></div>
+
+<script>
+'use strict';
+
+// ===== STATE =====
+let G;
+function initState(){
+  G={
+    week:1, day:1, ap:3,
+    p:{ st:10,maxSt:10, fm:5, sp:10, po:3, gold:50, sn:0 },
+    comp:{ hyota:false, enda:false },
+    bond:{ hyota:0, enda:0 },
+    hosp:false, hospDays:0,
+    scandal:false, scanDays:0,
+    bonus:false,
+    yScore:55,
+    ignorePen:0,
+    attempts:0,
+    hyotaUsed:false,
+    log:[],
+    phase:'intro',
+  };
+}
+
+// ===== UTILS =====
+const r=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+const clamp=(v,lo=0,hi=100)=>Math.max(lo,Math.min(hi,v));
+
+function dp(d){
+  if(d.fm!==undefined) G.p.fm=clamp(G.p.fm+d.fm);
+  if(d.sp!==undefined) G.p.sp=clamp(G.p.sp+d.sp);
+  if(d.po!==undefined) G.p.po=clamp(G.p.po+d.po);
+  if(d.sn!==undefined) G.p.sn=clamp(G.p.sn+d.sn);
+  if(d.st!==undefined) G.p.st=clamp(G.p.st+d.st,0,G.p.maxSt);
+  if(d.gold!==undefined) G.p.gold=Math.max(0,Math.min(999,G.p.gold+d.gold));
+}
+
+function log(txt,type=''){
+  G.log.unshift({txt,type});
+  if(G.log.length>30)G.log.pop();
+  renderLog();
+}
+
+function score(){ return G.p.fm*.3+G.p.sp*.5+G.p.po*.2; }
+function pname(k){return{fm:'知名度',sp:'支持率',po:'政策力',gold:'資金',sn:'SNS',st:'体力'}[k]||k;}
+
+// ===== ACTIONS =====
+const ACTS=[
+  {id:'speech',lbl:'街頭演説',icon:'🎤',ap:1,st:1,
+   fx:()=>({fm:r(4,9),sp:r(2,4)}),
+   sc:{bg:'linear-gradient(180deg,#1a2a0a,#2a4a0a)',icon:'🎤',ttl:'街頭演説',sub:'あさひ駅前で訴える'},
+   msgs:['熱のこもった演説に通行人が足を止めた！','雨の中の演説、かえって注目を集めた！','「頑張れ！」と声をかけてくれる人がいた','学生グループが立ち止まって聞いてくれた']},
+  {id:'flyer',lbl:'ビラ配り',icon:'📄',ap:1,st:1,
+   fx:()=>({fm:r(2,5),sp:r(1,3)}),
+   sc:{bg:'linear-gradient(180deg,#0a1a2a,#0a2a3a)',icon:'📄',ttl:'ビラ配り',sub:'商店街を一軒ずつ回る'},
+   msgs:['受け取ってくれる人が少しずつ増えてきた','商店街のおじさんが「頑張れよ」と声をかけてくれた','ビラをじっくり読んでいる人がいた','足が棒になったが、地道に配り続けた']},
+  {id:'meet',lbl:'後援会まわり',icon:'🤝',ap:1,st:1,
+   fx:()=>({sp:r(5,9),gold:r(5,12)}),
+   sc:{bg:'linear-gradient(180deg,#1a0a0a,#2a1a0a)',icon:'🤝',ttl:'後援会まわり',sub:'支持者の家を訪問する'},
+   msgs:['後援会の方々と熱い議論を交わした','「あなたに賭けてみる」と言ってくれる人がいた','夜遅くまで膝を突き合わせて話し合った','支持者がさらに仲間を紹介してくれた']},
+  {id:'policy',lbl:'政策を練る',icon:'📚',ap:1,st:1,
+   fx:()=>({po:r(4,8)}),
+   sc:{bg:'linear-gradient(180deg,#0a0a1a,#0a0a2a)',icon:'📚',ttl:'政策研究',sub:'深夜まで政策を練る'},
+   msgs:['深夜まで資料を読み漁った。目が痛い','地域の課題がだんだん見えてきた','明快な政策ビジョンが固まってきた','理想と現実の狭間で考え込んだ']},
+  {id:'fund',lbl:'資金集め',icon:'💰',ap:1,st:1,
+   fx:()=>{const e={gold:r(15,28)};if(Math.random()<.25)e.sp=-r(3,7);return e;},
+   sc:{bg:'linear-gradient(180deg,#1a1a0a,#2a2a0a)',icon:'💰',ttl:'資金集め',sub:'後援会パーティーを開く'},
+   msgs:['後援会パーティーで資金を集めた','企業献金を断り、個人から少しずつ集めた','地元商工会の方々が協力してくれた']},
+  {id:'sns',lbl:'SNS投稿',icon:'📱',ap:1,st:0,isSns:true,炎上:.15,
+   fx:()=>({fm:r(2,6),sp:r(1,3),sn:r(2,5)}),
+   sc:{bg:'linear-gradient(180deg,#001122,#002244)',icon:'📱',ttl:'SNS投稿',sub:'夜中にスマホと格闘する'},
+   msgs:['投稿がプチバズり！思ったより反響があった','若者からのリプライが増えてきた','フォロワーが少しずつ増えている']},
+  {id:'media',lbl:'メディア対応',icon:'📺',ap:1,st:1,炎上:.28,
+   fx:()=>({fm:r(5,12),sn:r(1,3)}),
+   sc:{bg:'linear-gradient(180deg,#220022,#330033)',icon:'📺',ttl:'メディア対応',sub:'地元新聞・ラジオの取材'},
+   msgs:['地元新聞に顔写真付きで載った！','ラジオのインタビューで自分の言葉で語れた','記者の鋭い質問に冷や汗をかいた']},
+  {id:'poster',lbl:'ポスター貼り',icon:'🖼️',ap:1,st:2,isHvy:true,goldCost:5,
+   fx:()=>({fm:r(6,11)}),
+   sc:{bg:'linear-gradient(180deg,#0a2a0a,#0a3a1a)',icon:'🖼️',ttl:'ポスター貼り',sub:'市内を自転車で駆け回る'},
+   msgs:['市内の掲示板にポスターを貼り終えた。体がバキバキだ','電柱から電柱へ、夜通しポスターを貼った']},
+  {id:'visit',lbl:'個別訪問',icon:'🚶',ap:1,st:2,isHvy:true,
+   fx:()=>({sp:r(7,13)}),
+   sc:{bg:'linear-gradient(180deg,#1a0a2a,#2a0a3a)',icon:'🚶',ttl:'個別訪問',sub:'一軒一軒、頭を下げて回る'},
+   msgs:['「応援するよ」という声が増えてきた','玄関先で長話になった家もあった','足が棒になるまで歩き続けた']},
+  {id:'strat',lbl:'作戦会議',icon:'🗺️',ap:1,st:1,isStrat:true,needComp:true,
+   fx:()=>({}),
+   sc:{bg:'linear-gradient(180deg,#1a1a0a,#1a1a1a)',icon:'🗺️',ttl:'作戦会議',sub:'仲間と夜通し戦略を練る'},
+   msgs:['次の一手が見えてきた！','みんなの知恵を合わせれば怖いものなし']},
+  {id:'rest',lbl:'休む',icon:'🛌',ap:1,st:-6,isRest:true,
+   fx:()=>({}),
+   sc:{bg:'linear-gradient(180deg,#050505,#0a0a10)',icon:'🛌',ttl:'休息',sub:'布団に倒れ込む'},
+   msgs:['ぐっすり眠れた。明日に備えよう','しっかり休んだ。体が軽い','眠れそうになかったが、いつの間にか朝だった']},
+];
+
+// ===== SUNDAY EVENTS =====
+const INTERFERE=[
+  {ttl:'⚠️ 妨害：ポスター剥がし',
+   desc:'世渡陣営がこちらのポスターを市内から根こそぎ剥がしていた。\n知名度に大きなダメージ！',
+   dmg:{fm:-12},
+   ch:[
+     {lbl:'即座に貼り直す',cls:'safe',desc:'知名度を回復（体力-1）',fn:'repost'},
+     {lbl:'SNSで告発する',cls:'',desc:'知名度回復＋炎上リスク',fn:'sns_expose'},
+     {lbl:'無視する',cls:'danger',desc:'ダメージ継続（翌週も知名度-5）',fn:'ignore'},
+   ]},
+  {ttl:'⚠️ 妨害：デマ拡散',
+   desc:'「宗理候補は裏金を受け取っている」というデマがSNSで広まっている！\n支持率が急落！',
+   dmg:{sp:-15},
+   ch:[
+     {lbl:'記者会見を開く',cls:'safe',desc:'支持率回復（成功率70%）',fn:'press'},
+     {lbl:'SNSで反論する',cls:'',desc:'支持率回復＋炎上リスク',fn:'sns_refute'},
+     {lbl:'無視する',cls:'danger',desc:'ダメージ継続（翌週も支持率-5）',fn:'ignore'},
+   ]},
+  {ttl:'⚠️ 妨害：後援会切り崩し',
+   desc:'世渡が支持者に直接働きかけ、後援会の一部が離反しそうだ。\n支持率と資金にダメージ！',
+   dmg:{sp:-10,gold:-15},
+   ch:[
+     {lbl:'個別に説得する',cls:'safe',desc:'支持率+8 資金+5（体力-2）',fn:'persuade'},
+     {lbl:'新しい支持者を開拓',cls:'',desc:'知名度+5',fn:'new_fans'},
+     {lbl:'無視する',cls:'danger',desc:'ダメージ継続',fn:'ignore'},
+   ]},
+  {ttl:'⚠️ 妨害：街宣車妨害',
+   desc:'世渡陣営の街宣車が演説会場周辺をぐるぐる走り回り\nこちらの声がかき消されてしまった。',
+   dmg:{fm:-8},
+   ch:[
+     {lbl:'場所を変えて続ける',cls:'safe',desc:'知名度+6',fn:'move_speech'},
+     {lbl:'SNSでライブ配信',cls:'',desc:'知名度+8 支持率+3 炎上リスク',fn:'sns_live'},
+     {lbl:'無視する',cls:'danger',desc:'ダメージ継続',fn:'ignore'},
+   ]},
+];
+const CHANCE=[
+  {ttl:'📰 チャンス：地元新聞に特集掲載',
+   desc:'「市政を変える！元サラリーマン候補の挑戦」\n地元紙に特集記事が載った！',
+   fx:()=>{ dp({fm:12,sp:5}); log('地元新聞の特集記事に掲載された！','pos'); }},
+  {ttl:'📱 チャンス：SNS拡散',
+   desc:'先週の演説動画がSNSで拡散！\n若者を中心に大きな反響を呼んでいる。',
+   fx:()=>{ dp({fm:8,sp:8,sn:5}); log('演説動画がバズった！','pos'); }},
+  {ttl:'📋 チャンス：政策が話題に',
+   desc:'発表した子育て支援政策が専門家から高い評価を受けた！',
+   fx:()=>{ dp({po:8,fm:5}); log('政策が専門家に評価された！','pos'); }},
+  {ttl:'🎓 チャンス：若者グループが応援',
+   desc:'地元大学のサークルが「宗理を応援する会」を結成してくれた！',
+   fx:()=>{ dp({sp:10,fm:6}); log('大学生グループが応援団を結成！','pos'); }},
+];
+
+// ===== RENDER =====
+function setScene(sc){
+  document.getElementById('scene-bg').style.background=sc.bg||'#0a1628';
+  document.getElementById('scene-icon').textContent=sc.icon||'🏙️';
+  document.getElementById('scene-ttl').textContent=sc.ttl||'';
+  document.getElementById('scene-sub').textContent=sc.sub||'';
+}
+
+function renderAll(){
+  renderHdr();
+  renderParams();
+  renderLog();
+  renderActions();
+  renderComp();
+}
+
+function renderHdr(){
+  const days=['月','火','水','木','金','土','日'];
+  const dn=days[G.day-1]||'';
+  const isSun=G.day===7;
+  const we=G.week===8&&isSun?'📢 選挙当日！':`${G.week}週目・${dn}曜日`;
+  document.getElementById('hweek').textContent=we;
+  const hap=document.getElementById('hap');
+  if(!isSun){
+    let d='';for(let i=0;i<3;i++)d+=`<span class="ap-dot${i<G.ap?' on':''}"></span>`;
+    hap.innerHTML=`AP ${d}`;
+  }else{
+    hap.innerHTML='<span style="color:#ffe44d">イベントフェーズ</span>';
+  }
+}
+
+function renderParams(){
+  const p=G.p;
+  const sv=(id,v,mx)=>{
+    const ve=document.getElementById('v-'+id);
+    const be=document.getElementById('b-'+id);
+    if(ve)ve.textContent=Math.round(v);
+    if(be)be.style.width=`${(v/mx)*100}%`;
+  };
+  sv('st',p.st,p.maxSt);sv('fm',p.fm,100);sv('sp',p.sp,100);sv('po',p.po,100);sv('sn',p.sn,100);
+  document.getElementById('gold').textContent=`💰 資金：¥${p.gold}万`;
+  const my=score().toFixed(1);
+  const en=(G.yScore+G.ignorePen).toFixed(1);
+  const dc=my>=en?'#22cc44':'#cc2222';
+  document.getElementById('rival').innerHTML=
+    `世渡スコア: ${en}<br>自スコア: <span style="color:${dc}">${my}</span>`;
+}
+
+function renderLog(){
+  document.getElementById('log').innerHTML=
+    G.log.slice(0,12).map(e=>`<div class="le ${e.type}">${e.txt}</div>`).join('');
+}
+
+function renderComp(){
+  const el=document.getElementById('companions');
+  const c=[];
+  if(G.comp.hyota)c.push('<span class="chip">票田幸枝</span>');
+  if(G.comp.enda) c.push('<span class="chip">演田熱子</span>');
+  el.innerHTML=c.join('');
+}
+
+function renderActions(){
+  const area=document.getElementById('act-area');
+  const evp=document.getElementById('evpanel');
+  if(G.phase==='sunday'||G.phase==='scandal'||G.phase==='intro'){
+    area.style.display='none';evp.classList.add('show');return;
+  }
+  area.style.display='block';evp.classList.remove('show');
+  const lbl=document.getElementById('act-label');
+  if(G.hosp){
+    lbl.innerHTML=`🏥 <span style="color:#ff6633">入院中（残り${G.hospDays}日）　SNS投稿のみ可</span>`;
+  }else if(G.ap<=0){
+    lbl.innerHTML='■ 今日の行動は終わり。<span style="color:#ffe44d">翌日へ進む</span>';
+  }else{
+    lbl.innerHTML=`■ 行動を選択（残りAP: <span style="color:#ffe44d">${G.ap}</span>）`;
+  }
+  const btns=document.getElementById('act-btns');
+  btns.innerHTML='';
+  if(G.ap<=0&&!G.hosp){
+    const b=document.createElement('button');
+    b.className='ab next-btn';b.textContent='翌日へ ▶';b.onclick=nextDay;
+    btns.appendChild(b);return;
+  }
+  ACTS.forEach(a=>{
+    if(G.hosp&&!a.isSns)return;
+    if(a.needComp&&!G.comp.hyota&&!G.comp.enda)return;
+    const b=document.createElement('button');
+    b.className='ab'+(a.isSns?' sns':'')+(a.isHvy?' hvy':'');
+    const stCost=a.st<0?'体力回復':a.st===0?'体力消費なし':`体力-${a.st}`;
+    const goldLbl=a.goldCost?` ¥${a.goldCost}`:'' ;
+    b.innerHTML=`<span class="bi">${a.icon}</span>${a.lbl}<span class="bc">${stCost}${goldLbl}</span>`;
+    const dis=G.ap<=0||(a.goldCost&&G.p.gold<a.goldCost)||
+              (!a.isSns&&!a.isRest&&G.p.st<=0&&a.st>0);
+    b.disabled=dis;
+    if(!dis)b.onclick=()=>doAct(a);
+    btns.appendChild(b);
+  });
+}
+
+// ===== ACTION LOGIC =====
+function doAct(a){
+  if(G.ap<=0&&!G.hosp)return;
+  setScene(a.sc);
+  if(a.goldCost)G.p.gold=Math.max(0,G.p.gold-a.goldCost);
+  if(!G.hosp)G.ap-=a.ap;
+  if(a.comp){G.bond.hyota=Math.min(5,G.bond.hyota+.05);G.bond.enda=Math.min(5,G.bond.enda+.05);}
+  if(a.isRest){
+    dp({st:6});
+    log(`🛌 ${a.msgs[r(0,a.msgs.length-1)]}`, 'pos');
+    renderAll();return;
+  }
+  if(a.isStrat){
+    G.bonus=true;
+    log('🗺️ 仲間と作戦会議！次の行動の効果がアップする','evt');
+    dp({st:-a.st});renderAll();checkSt();return;
+  }
+  if(!a.isSns)dp({st:-a.st});
+  if(a['炎上']&&Math.random()<a['炎上']){triggerScandal(a);return;}
+  let fx=a.fx();
+  if(G.bonus){
+    Object.keys(fx).forEach(k=>{if(fx[k]>0)fx[k]=Math.floor(fx[k]*1.4);});
+    G.bonus=false;log('✨ 作戦会議の効果で行動力アップ！','evt');
+  }
+  dp(fx);
+  const msg=a.msgs[r(0,a.msgs.length-1)];
+  const gains=Object.entries(fx).filter(([k,v])=>v>0).map(([k,v])=>`${pname(k)}+${v}`).join(' ');
+  const losses=Object.entries(fx).filter(([k,v])=>v<0).map(([k,v])=>`${pname(k)}${v}`).join(' ');
+  log(`${a.icon} ${msg}`);
+  if(gains)log(`　→ ${gains}`,'pos');
+  if(losses)log(`　→ ${losses}`,'neg');
+  renderAll();checkSt();
+}
+
+function checkSt(){
+  if(G.p.st<=0&&!G.hosp){
+    if(G.comp.hyota&&!G.hyotaUsed){
+      G.hyotaUsed=true;G.p.st=3;
+      showOv('票田幸枝の助け！',
+        '「なるちゃん！顔色が悪いわよ！」\n票田さんに強引に食事をとらされ、なんとか回復した！\n（票田さんの特殊スキル使用）',
+        [{lbl:'ありがとうございます！',fn:hideOv}]);
+      log('🍙 票田さんのおかげで倒れずに済んだ！','evt');
+      return;
+    }
+    hospitalize();
+  }
+}
+
+function hospitalize(){
+  G.hosp=true;G.hospDays=3;G.p.st=G.p.maxSt;
+  G.yScore+=3;
+  log('🏥 過労で倒れた！緊急入院！','neg');
+  log('　世渡陣営が妨害工作を強化した（世渡スコア+3）','neg');
+  showOv('過労で入院！',
+    '「なるちゃん！！」（票田幸枝）\n\n過労で倒れた。3日間入院。\nその間、世渡陣営は容赦なく動き続ける。\nSNS投稿のみ使用可能。',
+    [{lbl:'くそ…すぐ退院してやる',fn:hideOv}]);
+  renderAll();
+}
+
+// ===== SCANDAL =====
+function triggerScandal(a){
+  G.phase='scandal';
+  dp({sp:-20});
+  log('🔥 炎上発生！支持率が急落した！','neg');
+  showEvPanel('🔥 炎上中！',
+    `${a.icon}の発言・投稿が予想外の方向で炎上した！<br>支持率急落（-20）。どう対応する？`,
+    [
+      {lbl:'即謝罪する',cls:'safe',desc:'支持率-5で確実に収束',fn:()=>scandalRes('sorry')},
+      {lbl:'釈明投稿',cls:'',desc:'支持率±0・長引くリスクあり',fn:()=>scandalRes('excuse')},
+      {lbl:'無視する',cls:'danger',desc:'毎日支持率-3（高リスク）',fn:()=>scandalRes('ignore')},
+    ]);
+}
+
+function scandalRes(c){
+  if(c==='sorry'){dp({sp:-5});log('📢 即座に謝罪。支持率は少し下がったが炎上収束。');}
+  else if(c==='excuse'){
+    if(Math.random()<.5)log('📢 釈明が功を奏した！炎上収束。','pos');
+    else{dp({sp:-8});log('📢 釈明が逆効果…さらに燃えた。','neg');}
+  }else{
+    G.scandal=true;G.scanDays=3;
+    log('🔥 炎上継続中。毎日支持率-3が続く。','neg');
+  }
+  G.phase='action';renderActions();renderAll();
+}
+
+// ===== NEXT DAY =====
+function nextDay(){
+  if(G.scandal){
+    G.scanDays--;dp({sp:-3});log('🔥 炎上継続中…支持率-3','neg');
+    if(G.scanDays<=0){G.scandal=false;log('🔥 ようやく炎上が収まった');}
+  }
+  if(G.hosp){
+    G.hospDays--;
+    if(G.hospDays<=0){G.hosp=false;log('🏥 退院した。また頑張ろう！','pos');}
+    else log(`🏥 入院${3-G.hospDays}日目。まだ動けない…`,'neg');
+  }
+  G.day++;G.ap=3;G.phase='action';
+  if(G.day>7){
+    G.day=1;G.week++;
+    log(`━━━━ 第${G.week}週目が始まった ━━━━`,'sys');
+    if(G.ignorePen>0)G.ignorePen=Math.max(0,G.ignorePen-2);
+    checkJoins();
+  }
+  if(G.day===7){
+    if(G.week===8){triggerElection();return;}
+    triggerSunday();return;
+  }
+  renderAll();
+}
+
+function checkJoins(){
+  if(G.week===1&&!G.comp.hyota){
+    G.comp.hyota=true;G.bond.hyota=1;
+    showOv('仲間が加わった！',
+      '「あら、見かけない顔ね。ビラ配り？ご苦労様〜」\n\n商店街の惣菜屋「票田ストア」のおかみ・票田幸枝さんが\n成夫を応援してくれることになった！\n\n特殊スキル：倒れそうなとき一度だけ入院を防ぐ',
+      [{lbl:'ありがとうございます！',fn:hideOv}]);
+    log('🍙 票田幸枝さんが仲間に加わった！','evt');
+  }
+  if(G.week===2&&!G.comp.enda){
+    G.comp.enda=true;G.bond.enda=1;
+    showOv('仲間が加わった！',
+      '「あなた！さっきの演説、聞いてましたよ！」\n\n元地方局リポーター・演田熱子さんが\n秘書として参加することになった！\n\n特殊スキル：妨害対応で高い回復効果（ただし五分五分）',
+      [{lbl:'よろしく頼む！',fn:hideOv}]);
+    log('📢 演田熱子さんが仲間に加わった！','evt');
+  }
+}
+
+// ===== SUNDAY =====
+function triggerSunday(){
+  G.phase='sunday';
+  if(G.week===1){
+    tsumedaEvent();return;
+  }
+  if(Math.random()<.5){
+    const ev=INTERFERE[r(0,INTERFERE.length-1)];
+    showInterference(ev);
+  }else{
+    const ev=CHANCE[r(0,CHANCE.length-1)];
+    showChance(ev);
+  }
+  renderAll();
+}
+
+function tsumedaEvent(){
+  showEvPanel('📞 詰田からの電話',
+    '「おい宗理！お前が選挙に出るって本当か？」\n電話口から詰田部長の怒鳴り声が聞こえた。\n「笑わせるな！無能がやれるわけないだろ！」\n\nどう答える？',
+    [
+      {lbl:'「必ず当選して見せます」',cls:'safe',desc:'',fn:()=>{
+        dp({sp:5,fm:3});
+        log('📞 詰田の罵倒を跳ね返した。なぜか支持率が上がった。','pos');
+        endSunday();
+      }},
+      {lbl:'「うるさい、関係ない」',cls:'',desc:'',fn:()=>{
+        dp({fm:4});
+        log('📞 詰田を一刀両断。清々しい。','pos');
+        endSunday();
+      }},
+    ]);
+  renderAll();
+}
+
+function showInterference(ev){
+  if(ev.dmg)dp(ev.dmg);
+  const dmgTxt=Object.entries(ev.dmg||{}).map(([k,v])=>`${pname(k)}${v}`).join(' ');
+  log(`⚠️ 世渡の妨害！${dmgTxt}`,'neg');
+  const hasEnda=G.comp.enda;
+  const choices=[...ev.ch];
+  if(hasEnda)choices.push({lbl:'演田に任せる',cls:'',desc:'大回復か大失敗（五分五分）',fn:'enda'});
+  showEvPanel(ev.ttl, ev.desc.replace(/\n/g,'<br>'),
+    choices.map(c=>({...c,fn:()=>handleInter(c.fn,ev)})));
+}
+
+function handleInter(fn,ev){
+  switch(fn){
+    case'repost': dp({fm:Math.floor(Math.abs(ev.dmg?.fm||10)*.5),st:-1}); log('📌 急いでポスターを貼り直した！','pos'); break;
+    case'sns_expose': dp({fm:8}); if(Math.random()<.3){dp({sp:-8});log('📱 SNSで告発したが炎上した…','neg');}else log('📱 SNSで告発！反響が広がった。','pos'); break;
+    case'press': if(Math.random()<.7){dp({sp:10});log('📢 記者会見成功！デマを打ち消した。','pos');}else{dp({sp:-5});log('📢 記者会見がしどろもどろに…','neg');} break;
+    case'sns_refute': dp({fm:5}); if(Math.random()<.35){dp({sp:-10});log('📱 SNS反論が炎上した…','neg');}else{dp({sp:8});log('📱 SNSでの反論が共感を呼んだ！','pos');} break;
+    case'persuade': dp({sp:8,gold:5,st:-2}); log('🤝 個別説得で支持者を引き留めた。','pos'); break;
+    case'new_fans': dp({fm:5}); log('🚶 新しい支持者を開拓した。'); break;
+    case'move_speech': dp({fm:6}); log('🎤 場所を変えて演説を続けた！','pos'); break;
+    case'sns_live': dp({fm:8,sp:3}); if(Math.random()<.3){dp({sp:-8});log('📱 ライブ配信が炎上…','neg');}else log('📱 ライブ配信が盛況！妨害を逆手に取った。','pos'); break;
+    case'enda': if(Math.random()<.5){dp({sp:15});log('📢 演田さんが完璧に対応！大逆転！','pos');}else{dp({sp:-5});log('📢 演田さんが暴走してしまった…','neg');} break;
+    case'ignore': G.ignorePen+=5;G.yScore+=3; log('😶 無視した。ダメージが続く…','neg'); break;
+  }
+  endSunday();
+}
+
+function showChance(ev){
+  ev.fx();
+  showEvPanel(ev.ttl, ev.desc.replace(/\n/g,'<br>'),
+    [{lbl:'よし、この勢いで行くぞ！',cls:'safe',fn:endSunday}]);
+}
+
+function endSunday(){
+  G.phase='action';G.day=7;G.ap=0;
+  renderAll();
+  setTimeout(nextDay,300);
+}
+
+// ===== ELECTION =====
+function triggerElection(){
+  G.phase='election';
+  const my=score();
+  const en=G.yScore+G.ignorePen;
+  const win=my>en;
+  const ov=document.getElementById('ov');
+  const box=document.getElementById('ovbox');
+  ov.classList.add('show');
+  const maxS=Math.max(my,en,60);
+  box.innerHTML=`
+    <h2 style="color:${win?'#ffe44d':'#cc2222'}">📺 開票速報</h2>
+    <div style="margin:14px 0;text-align:left;">
+      <div style="margin-bottom:8px;">
+        <div style="color:#8899bb;font-size:11px;margin-bottom:3px;">宗理 成夫（無所属）</div>
+        <div style="background:#001a44;border:1px solid #334466;height:22px;border-radius:3px;overflow:hidden;">
+          <div id="eln" style="height:100%;background:linear-gradient(90deg,#22cc44,#44ee66);width:0%;transition:width 1.5s;display:flex;align-items:center;padding-left:6px;font-size:10px;color:#000;font-weight:bold;">${my.toFixed(1)}pt</div>
+        </div>
+      </div>
+      <div style="margin-bottom:14px;">
+        <div style="color:#8899bb;font-size:11px;margin-bottom:3px;">世渡 巧三（現職）</div>
+        <div style="background:#001a44;border:1px solid #334466;height:22px;border-radius:3px;overflow:hidden;">
+          <div id="ele" style="height:100%;background:linear-gradient(90deg,#cc2222,#ee4444);width:0%;transition:width 1.5s;display:flex;align-items:center;padding-left:6px;font-size:10px;color:#fff;font-weight:bold;">${en.toFixed(1)}pt</div>
+        </div>
+      </div>
+      <div style="text-align:center;font-size:20px;color:${win?'#ffe44d':'#cc2222'};font-weight:bold;">
+        ${win?'🎉 当選確実！':'😢 落選…'}
+      </div>
+    </div>
+    <div id="el-msg" style="color:#aaccff;font-size:12px;margin-bottom:12px;line-height:1.7;"></div>
+    <div id="el-btns"></div>`;
+  setTimeout(()=>{
+    document.getElementById('eln').style.width=`${(my/maxS)*100}%`;
+    document.getElementById('ele').style.width=`${(en/maxS)*100}%`;
+  },100);
+  setTimeout(()=>{
+    const msg=document.getElementById('el-msg');
+    const btns=document.getElementById('el-btns');
+    if(win){
+      msg.innerHTML='「ま、まさか……わしが負けるとは……」<br>─ 世渡 巧三<br><br>宗理成夫、初当選！あさひ市議会議員に！';
+      btns.innerHTML='<button onclick="location.reload()" style="background:#001a44;border:2px solid #ffe44d;color:#ffe44d;padding:9px 20px;cursor:pointer;font-family:inherit;font-size:13px;">第2章へ（準備中）</button>';
+    }else{
+      G.attempts++;
+      if(G.attempts>=3){
+        msg.innerHTML='3回落選してしまった…\n宗理成夫の野望はここで潰えた。';
+        btns.innerHTML='<button onclick="location.reload()" style="background:#001a44;border:2px solid #cc2222;color:#cc2222;padding:9px 20px;cursor:pointer;font-family:inherit;font-size:13px;">最初からやり直す</button>';
+      }else{
+        msg.innerHTML=`次は必ず勝つ。まだ諦めない！<br>残り挑戦回数：${3-G.attempts}回（世渡スコア+5）`;
+        const att=G.attempts,ys=G.yScore+5;
+        btns.innerHTML=`<button id="retry-btn" style="background:#001a44;border:2px solid #5588cc;color:#fff;padding:9px 20px;cursor:pointer;font-family:inherit;font-size:13px;">もう一度挑戦する！</button>`;
+        setTimeout(()=>{
+          const rb=document.getElementById('retry-btn');
+          if(rb)rb.onclick=()=>retryChapter(att,ys);
+        },100);
+      }
+    }
+  },2000);
+}
+
+function retryChapter(att,ys){
+  initState();G.attempts=att;G.yScore=ys;
+  hideOv();renderAll();
+  log('━━━━ 再挑戦！ ━━━━','sys');
+  log('世渡のスコアが上がっている。より慎重に動かなければ。','neg');
+  G.phase='action';renderAll();
+}
+
+// ===== EVENT PANEL HELPER =====
+function showEvPanel(ttl,desc,choices){
+  document.getElementById('act-area').style.display='none';
+  const ep=document.getElementById('evpanel');
+  ep.classList.add('show');
+  document.getElementById('ev-ttl').textContent=ttl;
+  document.getElementById('ev-desc').innerHTML=desc;
+  const ch=document.getElementById('ev-choices');
+  ch.innerHTML='';
+  choices.forEach(c=>{
+    const b=document.createElement('button');
+    b.className='eb '+(c.cls||'');
+    b.innerHTML=c.lbl+(c.desc?`<br><small style="color:#667799">${c.desc}</small>`:'');
+    b.onclick=typeof c.fn==='function'?c.fn:()=>{};
+    ch.appendChild(b);
+  });
+}
+
+// ===== OVERLAY =====
+function showOv(ttl,body,btns){
+  document.getElementById('ov-ttl').textContent=ttl;
+  document.getElementById('ov-body').innerHTML=body.replace(/\n/g,'<br>');
+  const be=document.getElementById('ov-btns');be.innerHTML='';
+  btns.forEach(b=>{
+    const el=document.createElement('button');
+    el.textContent=b.lbl;el.onclick=b.fn;be.appendChild(el);
+  });
+  document.getElementById('ov').classList.add('show');
+}
+function hideOv(){ document.getElementById('ov').classList.remove('show'); }
+
+// ===== INTRO =====
+const INTRO=[
+  {
+    location:'某中小企業・深夜のオフィス',
+    bg:'linear-gradient(180deg,#050510 0%,#0a0a20 50%,#050510 100%)',
+    icon:'🏢', speaker:'',
+    body:[
+      '<span class="narr">──午後11時。</span>',
+      '<span class="narr">窓の外には、疲れた都会の灯りが広がっている。</span>',
+      '<span class="narr">デスクの上には未処理の書類が山積みだ。</span>',
+      '<br>',
+      '<span class="narr">宗理成夫、38歳。この会社に入って15年。</span>',
+      '<span class="narr">役職なし。妻なし。夢なし。</span>',
+      '<span class="narr">口癖は「まあ、しょうがないか」。</span>',
+    ]
+  },
+  {
+    location:'居酒屋「のぞみ」',
+    bg:'linear-gradient(180deg,#1a0800 0%,#2a1000 50%,#1a0500 100%)',
+    icon:'🍺', speaker:'',
+    body:[
+      '<span class="narr">終電を逃し、駅前の居酒屋に入った。</span>',
+      '<span class="narr">いつもの席、いつものビール、いつもの一人。</span>',
+      '<br>',
+      '<span class="narr">ぼんやりとテレビを眺めていると──</span>',
+      '<span class="narr">国会中継が映っていた。</span>',
+      '<br>',
+      '<span class="narr">議員たちが、怒鳴り合っている。</span>',
+    ]
+  },
+  {
+    location:'居酒屋「のぞみ」・続き',
+    bg:'linear-gradient(180deg,#1a0800 0%,#2a1000 50%,#1a0500 100%)',
+    icon:'📺', speaker:'テレビの中の議員',
+    body:[
+      '<span class="dial">「──その点については、前向きに検討してまいります」</span>',
+      '<span class="dial">「──慎重に議論を重ね、適切に対処する所存です」</span>',
+      '<br>',
+      '<span class="think">（……何も言ってない）</span>',
+      '<br>',
+      '<span class="dial">「──この問題については、しかるべき時期に──」</span>',
+      '<br>',
+      '<span class="think">（何も、言ってないじゃないか）</span>',
+    ]
+  },
+  {
+    location:'居酒屋「のぞみ」・決意',
+    bg:'linear-gradient(180deg,#0a0a1a 0%,#181830 50%,#0a0a1a 100%)',
+    icon:'💡', speaker:'宗理成夫',
+    body:[
+      '<span class="narr">気づいたら、グラスを握りしめていた。</span>',
+      '<br>',
+      '<span class="em">「……俺のほうが絶対うまくやれる」</span>',
+      '<br>',
+      '<span class="narr">声に出して言ったのは、初めてだった。</span>',
+      '<span class="narr">隣の席のサラリーマンがちらりと振り返る。</span>',
+      '<span class="narr">成夫は構わなかった。</span>',
+      '<br>',
+      '<span class="em">「俺が、やる」</span>',
+      '<br>',
+      '<span class="narr">その夜、宗理成夫は38年分の「まあ、しょうがないか」を捨てた。</span>',
+    ]
+  },
+  {
+    location:'某中小企業・部長室',
+    bg:'linear-gradient(180deg,#1a1000 0%,#2a1800 50%,#1a1000 100%)',
+    icon:'📝', speaker:'',
+    body:[
+      '<span class="dial">「部長、辞表です」</span>',
+      '<br>',
+      '<span class="narr">詰田圧男部長の顔が、見る見る赤くなった。</span>',
+      '<br>',
+      '<span class="dial" style="color:#ff8866">「……はあ？　お前、何言ってんの？」</span>',
+      '<span class="dial">「退職します。今月末で」</span>',
+      '<span class="dial" style="color:#ff8866">「ふざけるな！　政治家になるとか言ってたよな？</span>',
+      '<span class="dial" style="color:#ff8866">　お前みたいな無能が政治家？　笑わせるな！</span>',
+      '<span class="dial" style="color:#ff8866">　誰が票を入れると思ってんだ！」</span>',
+    ]
+  },
+  {
+    location:'某中小企業・部長室・続き',
+    bg:'linear-gradient(180deg,#1a1000 0%,#2a1800 50%,#1a1000 100%)',
+    icon:'🚪', speaker:'',
+    body:[
+      '<span class="dial" style="color:#ff8866">「いいか、お前の代わりはいくらでも──」</span>',
+      '<br>',
+      '<span class="narr">成夫はゆっくりと頭を下げた。</span>',
+      '<br>',
+      '<span class="dial">「お世話になりました」</span>',
+      '<br>',
+      '<span class="narr">ドアが、閉まった。</span>',
+    ]
+  },
+  {
+    location:'会社ビル前・秋',
+    bg:'linear-gradient(180deg,#0a1a0a 0%,#0a2a10 50%,#050f05 100%)',
+    icon:'🍂', speaker:'',
+    body:[
+      '<span class="narr">秋の風が、スーツの襟を撫でた。</span>',
+      '<span class="narr">15年間通い続けたビルを、成夫は振り返った。</span>',
+      '<br>',
+      '<span class="think">（詰田の言葉は、正しいかもしれない）</span>',
+      '<span class="think">（俺に、本当にできるのか？）</span>',
+      '<br>',
+      '<span class="narr">でも──やってみなければ分からない。</span>',
+      '<span class="narr">やらなければ、確実に何も変わらない。</span>',
+      '<br>',
+      '<span class="narr">彼はスマートフォンを取り出した。</span>',
+      '<span class="em">「市議会議員　立候補　方法」</span>',
+    ]
+  },
+  {
+    location:'在来線・あさひ市行き',
+    bg:'linear-gradient(180deg,#001020 0%,#002030 50%,#001020 100%)',
+    icon:'🚃', speaker:'',
+    body:[
+      '<span class="narr">──3日後。</span>',
+      '<span class="narr">新幹線を乗り換え、在来線に揺られること1時間。</span>',
+      '<br>',
+      '<span class="narr">車窓に映る景色が、だんだん変わっていく。</span>',
+      '<span class="narr">高層ビルが消え、田んぼが広がり、小さな駅が続く。</span>',
+      '<br>',
+      '<span class="think">（俺は何を変えたいんだろう）</span>',
+      '<span class="think">（この町の、何が好きだったんだろう）</span>',
+    ]
+  },
+  {
+    location:'あさひ市・商店街',
+    bg:'linear-gradient(180deg,#0a2a0a 0%,#0a3a15 50%,#082008 100%)',
+    icon:'🏘️', speaker:'',
+    body:[
+      '<span class="narr">あさひ市。生まれ故郷。</span>',
+      '<span class="narr">駅を出ると、懐かしい匂いがした。</span>',
+      '<br>',
+      '<span class="narr">商店街のシャッターが、増えていた。</span>',
+      '<span class="narr">子供の頃に通った駄菓子屋が、なくなっていた。</span>',
+      '<br>',
+      '<span class="narr">市役所の前に、一枚のポスターが貼ってある。</span>',
+      '<br>',
+      '<span class="em">「世渡巧三　3期目の挑戦！　実績と信頼の政治を」</span>',
+      '<br>',
+      '<span class="narr">写真の男は、いかにも「政治家然」とした笑顔を浮かべていた。</span>',
+    ]
+  },
+  {
+    location:'あさひ市・路地裏',
+    bg:'linear-gradient(180deg,#0a2a0a 0%,#0a3a15 50%,#082008 100%)',
+    icon:'✊', speaker:'宗理成夫',
+    body:[
+      '<span class="think">（……相手は、こういう人間か）</span>',
+      '<br>',
+      '<span class="narr">成夫は小さく息を吸った。</span>',
+      '<br>',
+      '<span class="narr">選挙まで、8週間。</span>',
+      '<span class="narr">知名度はゼロ。資金も底をつきかけている。</span>',
+      '<span class="narr">事務所も、スタッフも、何もない。</span>',
+      '<br>',
+      '<span class="em">「──やってやる」</span>',
+      '<br>',
+      '<span class="narr">宗理成夫の、長い長い戦いが始まった。</span>',
+    ]
+  },
+];
+let introIdx=0;
+
+function showIntro(){
+  G.phase='intro';
+  document.getElementById('gscreen').style.display='none';
+  const el=document.getElementById('story');
+  el.classList.add('show');
+  el.onclick=advanceIntro;
+  const s=INTRO[introIdx];
+  document.getElementById('story-bg').style.background=s.bg;
+  document.getElementById('story-scene-icon').textContent=s.icon||'';
+  document.getElementById('story-location').textContent=s.location||'';
+  document.getElementById('story-speaker').textContent=s.speaker||'';
+  document.getElementById('story-body').innerHTML=s.body.join('\n');
+  const prog=document.getElementById('story-progress');
+  prog.innerHTML=INTRO.map((_,i)=>`<div class="sp-dot${i<introIdx?' done':i===introIdx?' cur':''}"></div>`).join('');
+  const isLast=introIdx===INTRO.length-1;
+  document.getElementById('story-next').innerHTML=
+    isLast?'<span style="color:#ffe44d;animation:blink 1s infinite;display:inline-block">▶ 選挙活動を始める</span>':'<span>▼ クリックで次へ</span>';
+}
+
+function advanceIntro(){
+  introIdx++;
+  if(introIdx>=INTRO.length){ endIntro(); return; }
+  showIntro();
+}
+
+function endIntro(){
+  document.getElementById('story').classList.remove('show');
+  document.getElementById('story').onclick=null;
+  startActionPhase();
+}
+
+function startActionPhase(){
+  G.phase='action';
+  G.comp.hyota=true;G.bond.hyota=1;
+  document.getElementById('evpanel').classList.remove('show');
+  document.getElementById('act-area').style.display='block';
+  log('━━━━ 第1章：市議選が始まった ━━━━','sys');
+  log('🏘️ あさひ市に帰ってきた。選挙まで8週間。');
+  log('🍙 票田幸枝さんが「頑張りなさい！」と応援してくれた','evt');
+  setScene({bg:'linear-gradient(180deg,#0a2a0a,#0a3a1a)',icon:'🏘️',ttl:'あさひ市',sub:'選挙活動スタート！'});
+  renderAll();
+}
+
+// ===== START =====
+function startGame(){
+  initState();introIdx=0;
+  document.getElementById('title').style.display='none';
+  document.getElementById('gscreen').style.display='none';
+  showIntro();
+}
+</script>
+</body>
+</html>

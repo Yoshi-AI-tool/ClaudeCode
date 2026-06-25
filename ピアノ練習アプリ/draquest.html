@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>ドラクエスト</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  font-family: 'MS Gothic', 'ＭＳ ゴシック', monospace;
+}
+#gameContainer {
+  position: relative;
+  width: 480px;
+}
+canvas { display: block; image-rendering: pixelated; }
+#mapCanvas { width: 480px; height: 384px; }
+#uiCanvas  { width: 480px; height: 128px; }
+#titleScreen {
+  position: absolute; inset: 0;
+  background: #000;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  color: #fff;
+  z-index: 10;
+}
+#titleScreen h1 { font-size: 36px; color: #ffe44d; text-shadow: 2px 2px #8b6914; margin-bottom: 8px; }
+#titleScreen p  { font-size: 14px; color: #aaa; margin-bottom: 32px; }
+#titleScreen button {
+  background: #1a3a6e; color: #fff; border: 2px solid #5588cc;
+  padding: 10px 32px; font-size: 16px; cursor: pointer;
+  font-family: inherit;
+}
+#titleScreen button:hover { background: #2a4a8e; }
+</style>
+</head>
+<body>
+<div id="gameContainer">
+  <canvas id="mapCanvas" width="480" height="384"></canvas>
+  <canvas id="uiCanvas"  width="480" height="128"></canvas>
+  <div id="titleScreen">
+    <h1>ドラクエスト</h1>
+    <p>～勇者の試練～</p>
+    <button id="startBtn">ゲームスタート</button>
+  </div>
+</div>
+
+<script>
+// ===== 定数 =====
+const TILE = 32;
+const MAP_W = 15, MAP_H = 12;
+const SCREEN_W = 480, SCREEN_H = 384;
+
+// タイルID
+const T = { GRASS:0, WATER:1, MOUNTAIN:2, FOREST:3, TOWN:4, DUNGEON:5, SAND:6 };
+
+// カラーパレット
+const TILE_COLORS = {
+  [T.GRASS]:   ['#4a9e4a','#3a8e3a'],
+  [T.WATER]:   ['#2266cc','#1a55bb'],
+  [T.MOUNTAIN]:['#8a7a6a','#7a6a5a'],
+  [T.FOREST]:  ['#1a6a1a','#146014'],
+  [T.TOWN]:    ['#cc9944','#bb8833'],
+  [T.DUNGEON]: ['#553333','#442222'],
+  [T.SAND]:    ['#ddcc88','#ccbb77'],
+};
+
+// ===== マップ定義 =====
+const MAP = [
+  [2,2,2,1,1,1,3,3,3,3,2,2,2,2,2],
+  [2,0,0,1,0,0,3,0,0,3,0,0,0,0,2],
+  [2,0,4,0,0,0,0,0,0,0,0,4,0,0,2],
+  [2,0,0,0,0,1,1,1,0,0,0,0,0,0,2],
+  [1,1,0,0,0,1,0,0,0,0,0,0,3,3,2],
+  [0,0,0,0,0,1,0,0,0,0,0,0,3,0,2],
+  [0,0,0,6,6,6,0,0,5,0,0,0,0,0,2],
+  [1,0,0,6,0,6,0,0,0,0,0,0,0,0,2],
+  [1,1,0,6,6,6,0,0,0,0,0,4,0,0,2],
+  [2,1,0,0,0,0,0,0,0,0,0,0,0,0,2],
+  [2,0,0,0,0,0,0,0,3,3,3,0,0,0,2],
+  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
+];
+
+// 通行可能タイル
+const WALKABLE = new Set([T.GRASS, T.TOWN, T.DUNGEON, T.SAND, T.FOREST]);
+
+// ===== 敵定義 =====
+const ENEMIES = [
+  { name:'スライム',  hp:8,  maxHp:8,  atk:3,  exp:4,  gold:3,  color:'#4488ff', sprite:'slime' },
+  { name:'ドラキー',  hp:12, maxHp:12, atk:5,  exp:6,  gold:5,  color:'#442244', sprite:'bat'   },
+  { name:'ゴーレム',  hp:25, maxHp:25, atk:9,  exp:15, gold:12, color:'#887766', sprite:'golem' },
+  { name:'ドラゴン',  hp:50, maxHp:50, atk:18, exp:40, gold:30, color:'#cc4422', sprite:'dragon'},
+];
+
+// エリアごとの敵テーブル
+const AREA_ENEMIES = {
+  [T.GRASS]:   [0,0,0,1],
+  [T.FOREST]:  [0,1,1,2],
+  [T.SAND]:    [1,1,2],
+  [T.DUNGEON]: [2,2,3,3],
+};
+
+// ===== ゲーム状態 =====
+let state = 'map'; // map / battle / menu / dialog / gameover / clear
+let player = {
+  x: 2, y: 2,
+  hp: 30, maxHp: 30,
+  mp: 10, maxMp: 10,
+  atk: 8, def: 4,
+  lv: 1, exp: 0, gold: 10,
+  expNext: 10,
+  items: ['やくそう','やくそう'],
+  facing: 2, // 0=up 1=right 2=down 3=left
+  animFrame: 0,
+};
+
+let battle = null;
+let dialog = { lines: [], idx: 0, onDone: null };
+let menu = { cursor: 0, options: [], onSelect: null };
+let battleMenu = { phase: 'player', cursor: 0, message: '', subMenu: null };
+let battleAnim = { active: false, frame: 0, type: '' };
+
+// ===== Canvas =====
+const mapCanvas = document.getElementById('mapCanvas');
+const uiCanvas  = document.getElementById('uiCanvas');
+const mCtx = mapCanvas.getContext('2d');
+const uCtx = uiCanvas.getContext('2d');
+
+// ===== ユーティリティ =====
+function getTile(x, y) {
+  if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return T.MOUNTAIN;
+  return MAP[y][x];
+}
+
+function deepCopy(obj) { return JSON.parse(JSON.stringify(obj)); }
+
+function getExp(enemy) { return enemy.exp; }
+
+function lvUpCheck() {
+  while (player.exp >= player.expNext) {
+    player.exp -= player.expNext;
+    player.lv++;
+    player.maxHp += 8;
+    player.hp = player.maxHp;
+    player.maxMp += 2;
+    player.mp = player.maxMp;
+    player.atk += 3;
+    player.def += 1;
+    player.expNext = Math.floor(player.expNext * 1.8);
+    return true;
+  }
+  return false;
+}
+
+// ===== 描画: マップ =====
+function drawMap() {
+  mCtx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+
+  const camX = Math.max(0, Math.min(player.x - 7, MAP_W - 15));
+  const camY = Math.max(0, Math.min(player.y - 6, MAP_H - 12));
+
+  for (let ty = 0; ty < 12; ty++) {
+    for (let tx = 0; tx < 15; tx++) {
+      const mx = tx + camX, my = ty + camY;
+      const tile = getTile(mx, my);
+      const [c1, c2] = TILE_COLORS[tile] || ['#333','#222'];
+      mCtx.fillStyle = c1;
+      mCtx.fillRect(tx * TILE, ty * TILE, TILE, TILE);
+      // グリッドシェーディング
+      mCtx.fillStyle = c2;
+      mCtx.fillRect(tx * TILE + TILE - 4, ty * TILE, 4, TILE);
+      mCtx.fillRect(tx * TILE, ty * TILE + TILE - 4, TILE, 4);
+      // タイル装飾
+      drawTileDetail(mCtx, tx * TILE, ty * TILE, tile);
+    }
+  }
+
+  // プレイヤー
+  const px = (player.x - camX) * TILE;
+  const py = (player.y - camY) * TILE;
+  drawPlayer(mCtx, px, py);
+}
+
+function drawTileDetail(ctx, x, y, tile) {
+  if (tile === T.TOWN) {
+    ctx.fillStyle = '#885522';
+    ctx.fillRect(x+6, y+8, 20, 16);
+    ctx.fillStyle = '#cc4422';
+    ctx.beginPath();
+    ctx.moveTo(x+4, y+8); ctx.lineTo(x+16, y+2); ctx.lineTo(x+28, y+8);
+    ctx.fill();
+  } else if (tile === T.FOREST) {
+    ctx.fillStyle = '#228822';
+    ctx.beginPath(); ctx.arc(x+16, y+12, 8, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#116611';
+    ctx.fillRect(x+13, y+18, 6, 8);
+  } else if (tile === T.MOUNTAIN) {
+    ctx.fillStyle = '#aaaaaa';
+    ctx.beginPath();
+    ctx.moveTo(x+4, y+28); ctx.lineTo(x+16, y+6); ctx.lineTo(x+28, y+28);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(x+12, y+8); ctx.lineTo(x+16, y+6); ctx.lineTo(x+20, y+8);
+    ctx.lineTo(x+16, y+12); ctx.fill();
+  } else if (tile === T.WATER) {
+    ctx.strokeStyle = '#66aaff';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(x+4, y+10+i*8);
+      ctx.quadraticCurveTo(x+12, y+6+i*8, x+20, y+10+i*8);
+      ctx.stroke();
+    }
+  } else if (tile === T.DUNGEON) {
+    ctx.fillStyle = '#221111';
+    ctx.fillRect(x+10, y+10, 12, 16);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x+13, y+14, 6, 12);
+  }
+}
+
+function drawPlayer(ctx, x, y) {
+  const bob = Math.sin(player.animFrame * 0.15) * 2;
+  ctx.fillStyle = '#ffe0a0';
+  ctx.fillRect(x+10, y+4+bob, 12, 10); // 顔
+  ctx.fillStyle = '#4444cc';
+  ctx.fillRect(x+8,  y+14+bob, 16, 12); // 体
+  ctx.fillStyle = '#ffe0a0';
+  // 腕
+  if (player.facing === 0) {
+    ctx.fillRect(x+4,  y+15+bob, 6, 8);
+    ctx.fillRect(x+22, y+15+bob, 6, 8);
+  } else {
+    ctx.fillRect(x+2,  y+14+bob, 7, 8);
+    ctx.fillRect(x+23, y+14+bob, 7, 8);
+  }
+  ctx.fillStyle = '#3333aa';
+  ctx.fillRect(x+8,  y+26+bob, 6, 6); // 足
+  ctx.fillRect(x+18, y+26+bob, 6, 6);
+  // 髪
+  ctx.fillStyle = '#885522';
+  ctx.fillRect(x+9, y+2+bob, 14, 6);
+  ctx.fillRect(x+7, y+6+bob, 4, 4);
+  // 目
+  ctx.fillStyle = '#000';
+  if (player.facing !== 0) {
+    ctx.fillRect(x+12, y+8+bob, 2, 2);
+    ctx.fillRect(x+18, y+8+bob, 2, 2);
+  }
+}
+
+// ===== 描画: UIパネル =====
+function drawUI() {
+  uCtx.fillStyle = '#000814';
+  uCtx.fillRect(0, 0, 480, 128);
+
+  if (state === 'map' || state === 'dialog' || state === 'menu') {
+    drawStatusBar();
+    if (state === 'dialog') drawDialogBox();
+    else if (state === 'menu') drawMenuBox();
+    else drawFieldMessage();
+  } else if (state === 'battle') {
+    drawBattleUI();
+  } else if (state === 'gameover') {
+    drawGameOver();
+  } else if (state === 'clear') {
+    drawClear();
+  }
+}
+
+function drawWindow(ctx, x, y, w, h, title) {
+  ctx.fillStyle = '#001144';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = '#5588cc';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x+1, y+1, w-2, h-2);
+  ctx.strokeStyle = '#2244aa';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x+3, y+3, w-6, h-6);
+  if (title) {
+    ctx.fillStyle = '#ffe44d';
+    ctx.font = '13px monospace';
+    ctx.fillText(title, x+10, y+17);
+  }
+}
+
+function drawStatusBar() {
+  drawWindow(uCtx, 2, 2, 476, 50);
+  uCtx.fillStyle = '#fff';
+  uCtx.font = '12px monospace';
+  uCtx.fillText(`LV ${player.lv}  勇者`, 12, 20);
+
+  // HP バー
+  uCtx.fillText(`HP`, 12, 38);
+  drawBar(uCtx, 35, 30, 100, 10, player.hp, player.maxHp, '#22cc44', '#005511');
+  uCtx.fillStyle = '#aaffaa';
+  uCtx.fillText(`${player.hp}/${player.maxHp}`, 140, 40);
+
+  // MP バー
+  uCtx.fillStyle = '#fff';
+  uCtx.fillText(`MP`, 210, 38);
+  drawBar(uCtx, 233, 30, 80, 10, player.mp, player.maxMp, '#2244ff', '#000055');
+  uCtx.fillStyle = '#aaaaff';
+  uCtx.fillText(`${player.mp}/${player.maxMp}`, 318, 40);
+
+  uCtx.fillStyle = '#ffdd44';
+  uCtx.fillText(`G: ${player.gold}`, 390, 38);
+  uCtx.fillStyle = '#cccccc';
+  uCtx.fillText(`EXP: ${player.exp}/${player.expNext}`, 390, 22);
+}
+
+function drawBar(ctx, x, y, w, h, val, max, col, bg) {
+  ctx.fillStyle = bg;
+  ctx.fillRect(x, y, w, h);
+  const pct = Math.max(0, val / max);
+  ctx.fillStyle = col;
+  ctx.fillRect(x, y, Math.floor(w * pct), h);
+  ctx.strokeStyle = '#888';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, w, h);
+}
+
+function drawFieldMessage() {
+  drawWindow(uCtx, 2, 54, 476, 72);
+  uCtx.fillStyle = '#ccddff';
+  uCtx.font = '13px monospace';
+  const tile = getTile(player.x, player.y);
+  let hint = '';
+  if (tile === T.TOWN)    hint = '町に到着した。[Enter] で話す';
+  else if (tile === T.DUNGEON) hint = '洞窟の入口だ。[Enter] で入る';
+  else hint = '矢印キーで移動  [Enter] メニュー';
+  uCtx.fillText(hint, 14, 78);
+  // ミニマップ
+  drawMinimap();
+}
+
+function drawMinimap() {
+  const ox = 380, oy = 58, s = 5;
+  uCtx.fillStyle = '#000';
+  uCtx.fillRect(ox-2, oy-2, MAP_W*s+4, MAP_H*s+4);
+  for (let y = 0; y < MAP_H; y++) {
+    for (let x = 0; x < MAP_W; x++) {
+      const [c] = TILE_COLORS[MAP[y][x]] || ['#333'];
+      uCtx.fillStyle = c;
+      uCtx.fillRect(ox + x*s, oy + y*s, s, s);
+    }
+  }
+  uCtx.fillStyle = '#fff';
+  uCtx.fillRect(ox + player.x*s - 1, oy + player.y*s - 1, 3, 3);
+}
+
+function drawDialogBox() {
+  drawWindow(uCtx, 2, 54, 476, 72);
+  uCtx.fillStyle = '#ffffff';
+  uCtx.font = '14px monospace';
+  const lines = dialog.lines[dialog.idx];
+  if (Array.isArray(lines)) {
+    lines.forEach((l, i) => uCtx.fillText(l, 14, 76 + i * 20));
+  } else {
+    uCtx.fillText(lines || '', 14, 78);
+  }
+  // 点滅カーソル
+  if (Math.floor(Date.now() / 400) % 2 === 0) {
+    uCtx.fillStyle = '#ffe44d';
+    uCtx.fillText('▼', 455, 116);
+  }
+}
+
+function drawMenuBox() {
+  drawWindow(uCtx, 2, 54, 476, 72);
+  uCtx.font = '14px monospace';
+  menu.options.forEach((opt, i) => {
+    uCtx.fillStyle = i === menu.cursor ? '#ffe44d' : '#ffffff';
+    uCtx.fillText((i === menu.cursor ? '▶ ' : '  ') + opt, 14 + i * 130, 90);
+  });
+}
+
+// ===== バトル描画 =====
+function drawBattleUI() {
+  if (!battle) return;
+  const e = battle.enemy;
+
+  // 敵スプライト
+  drawEnemySprite(mCtx, e, battleAnim);
+
+  // バトルUI
+  uCtx.fillStyle = '#000814';
+  uCtx.fillRect(0, 0, 480, 128);
+
+  drawWindow(uCtx, 2, 2, 230, 50);
+  uCtx.fillStyle = '#fff'; uCtx.font = '12px monospace';
+  uCtx.fillText(`LV ${player.lv}  勇者`, 12, 20);
+  uCtx.fillText(`HP`, 12, 38);
+  drawBar(uCtx, 35, 30, 100, 10, player.hp, player.maxHp, '#22cc44', '#005511');
+  uCtx.fillStyle = '#aaffaa';
+  uCtx.fillText(`${player.hp}/${player.maxHp}`, 140, 40);
+
+  drawWindow(uCtx, 238, 2, 238, 50);
+  uCtx.fillStyle = '#fff';
+  uCtx.fillText(e.name, 248, 20);
+  uCtx.fillText(`HP`, 248, 38);
+  drawBar(uCtx, 270, 30, 100, 10, e.hp, e.maxHp, '#cc2222', '#550011');
+  uCtx.fillStyle = '#ffaaaa';
+  uCtx.fillText(`${e.hp}/${e.maxHp}`, 376, 40);
+
+  drawWindow(uCtx, 2, 54, 476, 72);
+  if (battleMenu.phase === 'player') {
+    if (!battleMenu.subMenu) {
+      const opts = ['たたかう','まほう','どうぐ','にげる'];
+      opts.forEach((o, i) => {
+        uCtx.fillStyle = i === battleMenu.cursor ? '#ffe44d' : '#fff';
+        uCtx.font = '14px monospace';
+        uCtx.fillText((i === battleMenu.cursor ? '▶' : ' ') + o, 14 + (i % 2) * 240, 78 + Math.floor(i / 2) * 22);
+      });
+    } else if (battleMenu.subMenu === 'magic') {
+      const spells = ['ホイミ(MP3)','メラ(MP4)','ベギラマ(MP6)'];
+      spells.forEach((s, i) => {
+        uCtx.fillStyle = i === battleMenu.cursor ? '#ffe44d' : '#fff';
+        uCtx.font = '13px monospace';
+        uCtx.fillText((i === battleMenu.cursor ? '▶' : ' ') + s, 14, 72 + i * 20);
+      });
+      uCtx.fillStyle = '#aaa'; uCtx.font='12px monospace';
+      uCtx.fillText('[B]キャンセル', 300, 115);
+    } else if (battleMenu.subMenu === 'item') {
+      if (player.items.length === 0) {
+        uCtx.fillStyle = '#ccc'; uCtx.font='13px monospace';
+        uCtx.fillText('アイテムがない', 14, 90);
+      } else {
+        const unique = [...new Set(player.items)];
+        unique.forEach((it, i) => {
+          const cnt = player.items.filter(x=>x===it).length;
+          uCtx.fillStyle = i === battleMenu.cursor ? '#ffe44d' : '#fff';
+          uCtx.font = '13px monospace';
+          uCtx.fillText((i === battleMenu.cursor ? '▶' : ' ') + `${it} x${cnt}`, 14, 72 + i * 20);
+        });
+      }
+      uCtx.fillStyle = '#aaa'; uCtx.font='12px monospace';
+      uCtx.fillText('[B]キャンセル', 300, 115);
+    }
+  } else {
+    // メッセージフェーズ
+    uCtx.fillStyle = '#fff'; uCtx.font = '14px monospace';
+    const lines = Array.isArray(battleMenu.message) ? battleMenu.message : [battleMenu.message];
+    lines.forEach((l, i) => uCtx.fillText(l, 14, 76 + i * 22));
+    if (battleMenu.phase === 'result') {
+      if (Math.floor(Date.now() / 400) % 2 === 0) {
+        uCtx.fillStyle = '#ffe44d'; uCtx.fillText('▼', 455, 116);
+      }
+    }
+  }
+}
+
+function drawEnemySprite(ctx, enemy, anim) {
+  ctx.fillStyle = '#112244';
+  ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  // 背景
+  ctx.fillStyle = '#1a0a00';
+  ctx.fillRect(0, SCREEN_H * 0.6, SCREEN_W, SCREEN_H * 0.4);
+
+  const shake = anim.active && anim.type === 'hit' ? Math.sin(anim.frame * 1.5) * 6 : 0;
+  const ex = SCREEN_W / 2 - 48 + shake, ey = 80;
+
+  if (enemy.sprite === 'slime') drawSlime(ctx, ex, ey, enemy.color);
+  else if (enemy.sprite === 'bat') drawBat(ctx, ex, ey, enemy.color);
+  else if (enemy.sprite === 'golem') drawGolem(ctx, ex, ey, enemy.color);
+  else if (enemy.sprite === 'dragon') drawDragon(ctx, ex, ey, enemy.color);
+}
+
+function drawSlime(ctx, x, y, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.ellipse(x+48, y+64, 38, 30, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x+48, y+44, 26, 26, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(x+38, y+40, 6, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+58, y+40, 6, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#111';
+  ctx.beginPath(); ctx.arc(x+40, y+41, 3, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+60, y+41, 3, 0, Math.PI*2); ctx.fill();
+}
+
+function drawBat(ctx, x, y, color) {
+  ctx.fillStyle = color;
+  // 翼
+  ctx.beginPath();
+  ctx.moveTo(x+48, y+50); ctx.lineTo(x+10, y+30); ctx.lineTo(x+20, y+60); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x+48, y+50); ctx.lineTo(x+86, y+30); ctx.lineTo(x+76, y+60); ctx.fill();
+  // 体
+  ctx.beginPath(); ctx.ellipse(x+48, y+55, 18, 22, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#ff4444';
+  ctx.beginPath(); ctx.arc(x+40, y+48, 4, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+56, y+48, 4, 0, Math.PI*2); ctx.fill();
+}
+
+function drawGolem(ctx, x, y, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x+22, y+20, 52, 60); // 体
+  ctx.fillRect(x+12, y+30, 18, 40); // 左腕
+  ctx.fillRect(x+66, y+30, 18, 40); // 右腕
+  ctx.fillRect(x+30, y+80, 16, 20); // 左足
+  ctx.fillRect(x+50, y+80, 16, 20); // 右足
+  ctx.fillStyle = '#aaa';
+  ctx.fillRect(x+24, y+22, 48, 8); // 頭部
+  ctx.fillStyle = '#ff2200';
+  ctx.fillRect(x+32, y+36, 10, 8); // 目
+  ctx.fillRect(x+54, y+36, 10, 8);
+}
+
+function drawDragon(ctx, x, y, color) {
+  ctx.fillStyle = color;
+  // 体
+  ctx.beginPath(); ctx.ellipse(x+48, y+70, 40, 28, 0, 0, Math.PI*2); ctx.fill();
+  // 首
+  ctx.beginPath();
+  ctx.moveTo(x+30, y+50); ctx.lineTo(x+48, y+20); ctx.lineTo(x+65, y+50); ctx.fill();
+  // 頭
+  ctx.beginPath(); ctx.ellipse(x+48, y+16, 22, 16, 0, 0, Math.PI*2); ctx.fill();
+  // 翼
+  ctx.fillStyle = '#aa2200';
+  ctx.beginPath();
+  ctx.moveTo(x+20, y+50); ctx.lineTo(x-10, y+20); ctx.lineTo(x+10, y+60); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x+76, y+50); ctx.lineTo(x+106, y+20); ctx.lineTo(x+86, y+60); ctx.fill();
+  // 目
+  ctx.fillStyle = '#ffff00';
+  ctx.beginPath(); ctx.arc(x+38, y+14, 5, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+58, y+14, 5, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(x+39, y+14, 2, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+59, y+14, 2, 0, Math.PI*2); ctx.fill();
+}
+
+function drawGameOver() {
+  mCtx.fillStyle = '#000';
+  mCtx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  mCtx.fillStyle = '#cc0000';
+  mCtx.font = 'bold 48px monospace';
+  mCtx.textAlign = 'center';
+  mCtx.fillText('GAME OVER', SCREEN_W/2, SCREEN_H/2 - 20);
+  mCtx.fillStyle = '#888';
+  mCtx.font = '16px monospace';
+  mCtx.fillText('[Enter] タイトルへ', SCREEN_W/2, SCREEN_H/2 + 30);
+  mCtx.textAlign = 'left';
+  uCtx.fillStyle = '#000814';
+  uCtx.fillRect(0, 0, 480, 128);
+}
+
+function drawClear() {
+  mCtx.fillStyle = '#000820';
+  mCtx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  // 星
+  for (let i = 0; i < 50; i++) {
+    mCtx.fillStyle = `rgba(255,255,${Math.random()>0.5?200:100},${0.5+Math.random()*0.5})`;
+    mCtx.fillRect(Math.random()*SCREEN_W, Math.random()*SCREEN_H*0.7, 2, 2);
+  }
+  mCtx.fillStyle = '#ffe44d';
+  mCtx.font = 'bold 42px monospace';
+  mCtx.textAlign = 'center';
+  mCtx.fillText('おめでとう！', SCREEN_W/2, 140);
+  mCtx.fillStyle = '#ffffff';
+  mCtx.font = '18px monospace';
+  mCtx.fillText('ドラゴンを倒し、', SCREEN_W/2, 200);
+  mCtx.fillText('世界に平和が訪れた！', SCREEN_W/2, 230);
+  mCtx.fillStyle = '#aaffaa';
+  mCtx.font = '14px monospace';
+  mCtx.fillText(`LV ${player.lv}  G ${player.gold}`, SCREEN_W/2, 290);
+  mCtx.fillStyle = '#888';
+  mCtx.fillText('[Enter] タイトルへ', SCREEN_W/2, SCREEN_H - 40);
+  mCtx.textAlign = 'left';
+  uCtx.fillStyle = '#000814';
+  uCtx.fillRect(0, 0, 480, 128);
+}
+
+// ===== バトルロジック =====
+function startBattle(enemyIdx) {
+  const base = ENEMIES[enemyIdx];
+  battle = {
+    enemy: deepCopy(base),
+    turn: 0,
+  };
+  state = 'battle';
+  battleMenu = { phase: 'message', cursor: 0, message: `${battle.enemy.name}が あらわれた！`, subMenu: null };
+  setTimeout(() => { battleMenu.phase = 'player'; battleMenu.cursor = 0; }, 1200);
+}
+
+function playerAction(action) {
+  if (!battle) return;
+  const e = battle.enemy;
+
+  if (action === 'attack') {
+    const dmg = Math.max(1, player.atk - Math.floor(Math.random() * 4));
+    e.hp = Math.max(0, e.hp - dmg);
+    battleAnim = { active: true, frame: 0, type: 'hit' };
+    battleMenu.phase = 'message';
+    battleMenu.message = `勇者の こうげき！\n${e.name}に ${dmg}のダメージ！`;
+    setTimeout(() => { battleAnim.active = false; afterPlayerAction(); }, 1000);
+  } else if (action === 'run') {
+    if (Math.random() < 0.5) {
+      battleMenu.phase = 'message';
+      battleMenu.message = 'うまく にげられた！';
+      setTimeout(endBattle, 1000);
+    } else {
+      battleMenu.phase = 'message';
+      battleMenu.message = 'にげられなかった！';
+      setTimeout(enemyTurn, 1000);
+    }
+  } else if (action === 'hoimi') {
+    if (player.mp < 3) {
+      battleMenu.phase = 'message';
+      battleMenu.message = 'MPが たりない！';
+      setTimeout(() => { battleMenu.phase = 'player'; battleMenu.subMenu = null; }, 1000);
+      return;
+    }
+    player.mp -= 3;
+    const heal = 15 + Math.floor(Math.random() * 10);
+    player.hp = Math.min(player.maxHp, player.hp + heal);
+    battleMenu.phase = 'message';
+    battleMenu.message = `ホイミ！\nHP が ${heal} かいふくした！`;
+    setTimeout(() => { battleMenu.subMenu = null; afterPlayerAction(); }, 1000);
+  } else if (action === 'mera') {
+    if (player.mp < 4) {
+      battleMenu.phase = 'message';
+      battleMenu.message = 'MPが たりない！';
+      setTimeout(() => { battleMenu.phase = 'player'; battleMenu.subMenu = null; }, 1000);
+      return;
+    }
+    player.mp -= 4;
+    const dmg = 12 + Math.floor(Math.random() * 8);
+    e.hp = Math.max(0, e.hp - dmg);
+    battleAnim = { active: true, frame: 0, type: 'hit' };
+    battleMenu.phase = 'message';
+    battleMenu.message = `メラ！\n${e.name}に ${dmg}のダメージ！`;
+    setTimeout(() => { battleAnim.active = false; battleMenu.subMenu = null; afterPlayerAction(); }, 1000);
+  } else if (action === 'begirema') {
+    if (player.mp < 6) {
+      battleMenu.phase = 'message';
+      battleMenu.message = 'MPが たりない！';
+      setTimeout(() => { battleMenu.phase = 'player'; battleMenu.subMenu = null; }, 1000);
+      return;
+    }
+    player.mp -= 6;
+    const dmg = 25 + Math.floor(Math.random() * 15);
+    e.hp = Math.max(0, e.hp - dmg);
+    battleAnim = { active: true, frame: 0, type: 'hit' };
+    battleMenu.phase = 'message';
+    battleMenu.message = `ベギラマ！\n${e.name}に ${dmg}のダメージ！`;
+    setTimeout(() => { battleAnim.active = false; battleMenu.subMenu = null; afterPlayerAction(); }, 1000);
+  } else if (action.startsWith('item:')) {
+    const itemName = action.slice(5);
+    const idx = player.items.indexOf(itemName);
+    if (idx === -1) return;
+    player.items.splice(idx, 1);
+    if (itemName === 'やくそう') {
+      const heal = 20 + Math.floor(Math.random() * 10);
+      player.hp = Math.min(player.maxHp, player.hp + heal);
+      battleMenu.phase = 'message';
+      battleMenu.message = `やくそうを つかった！\nHP が ${heal} かいふくした！`;
+      setTimeout(() => { battleMenu.subMenu = null; afterPlayerAction(); }, 1000);
+    }
+  }
+}
+
+function afterPlayerAction() {
+  if (!battle) return;
+  const e = battle.enemy;
+  if (e.hp <= 0) {
+    // 勝利
+    const expGain = e.exp, goldGain = e.gold;
+    player.exp += expGain;
+    player.gold += goldGain;
+    const didLvUp = lvUpCheck();
+    let msg = [`${e.name}を たおした！`, `EXP +${expGain}  G +${goldGain}`];
+    if (didLvUp) msg.push(`レベルが ${player.lv} に あがった！`);
+    battleMenu.phase = 'result';
+    battleMenu.message = msg;
+    battle = null;
+    // ドラゴン撃破 → クリア
+    if (e.name === 'ドラゴン') {
+      setTimeout(() => { state = 'clear'; }, 2000);
+    } else {
+      setTimeout(endBattle, 2000);
+    }
+    return;
+  }
+  enemyTurn();
+}
+
+function enemyTurn() {
+  if (!battle) return;
+  const e = battle.enemy;
+  const dmg = Math.max(1, e.atk - player.def + Math.floor(Math.random() * 4) - 2);
+  player.hp = Math.max(0, player.hp - dmg);
+  battleMenu.phase = 'message';
+  battleMenu.message = [`${e.name}の こうげき！`, `勇者に ${dmg}のダメージ！`];
+  if (player.hp <= 0) {
+    setTimeout(() => {
+      battleMenu.message = '勇者は しにました…';
+      setTimeout(() => { state = 'gameover'; }, 1500);
+    }, 1000);
+  } else {
+    setTimeout(() => { battleMenu.phase = 'player'; battleMenu.cursor = 0; }, 1200);
+  }
+}
+
+function endBattle() {
+  battle = null;
+  state = 'map';
+}
+
+// ===== ダイアログシステム =====
+function showDialog(lines, onDone) {
+  dialog = {
+    lines: Array.isArray(lines[0]) ? lines : lines.map(l => l),
+    idx: 0,
+    onDone,
+  };
+  state = 'dialog';
+}
+
+function advanceDialog() {
+  dialog.idx++;
+  if (dialog.idx >= dialog.lines.length) {
+    state = 'map';
+    if (dialog.onDone) dialog.onDone();
+  }
+}
+
+// ===== メニューシステム =====
+function showMenu(options, onSelect) {
+  menu = { cursor: 0, options, onSelect };
+  state = 'menu';
+}
+
+// ===== 町・ダンジョンイベント =====
+const TOWNS = [
+  { x:2, y:2, name:'はじまりの村' },
+  { x:11, y:2, name:'まほうつかいの里' },
+  { x:11, y:8, name:'勇者の砦' },
+];
+
+const DUNGEON = { x:8, y:6 };
+
+let dungeonDefeated = false;
+
+function onEnterTile(x, y) {
+  const tile = getTile(x, y);
+  const town = TOWNS.find(t => t.x === x && t.y === y);
+  if (town) {
+    showDialog(
+      [`${town.name}に 入った。`, `宿屋で 休んでいく？`, `HP と MP が 回復した！`],
+      () => {
+        player.hp = player.maxHp;
+        player.mp = player.maxMp;
+        // 特定の町でアイテム補充
+        if (town.name === '勇者の砦') {
+          player.items.push('やくそう');
+          showDialog(['やくそうを もらった！'], null);
+        }
+      }
+    );
+  } else if (tile === T.DUNGEON && x === DUNGEON.x && y === DUNGEON.y) {
+    if (!dungeonDefeated) {
+      showDialog(
+        ['ドラゴンの洞窟だ…', 'ここに 伝説の ドラゴンが いるという。', '戦うか？'],
+        () => {
+          showMenu(['はい', 'いいえ'], (opt) => {
+            if (opt === 'はい') {
+              state = 'map';
+              setTimeout(() => startBattle(3), 300);
+            } else {
+              state = 'map';
+            }
+          });
+        }
+      );
+    } else {
+      showDialog(['洞窟は しずかだ…'], null);
+    }
+  }
+}
+
+// ===== 入力処理 =====
+const keys = {};
+let moveTimer = 0;
+const MOVE_DELAY = 160;
+
+document.addEventListener('keydown', (e) => {
+  keys[e.key] = true;
+
+  if (state === 'dialog') {
+    if (e.key === 'Enter' || e.key === ' ') advanceDialog();
+    e.preventDefault(); return;
+  }
+
+  if (state === 'menu') {
+    if (e.key === 'ArrowLeft') menu.cursor = (menu.cursor - 1 + menu.options.length) % menu.options.length;
+    if (e.key === 'ArrowRight') menu.cursor = (menu.cursor + 1) % menu.options.length;
+    if (e.key === 'Enter' || e.key === ' ') {
+      const opt = menu.options[menu.cursor];
+      state = 'map';
+      if (menu.onSelect) menu.onSelect(opt);
+    }
+    e.preventDefault(); return;
+  }
+
+  if (state === 'battle') {
+    handleBattleKey(e.key);
+    e.preventDefault(); return;
+  }
+
+  if (state === 'gameover' || state === 'clear') {
+    if (e.key === 'Enter') resetGame();
+    e.preventDefault(); return;
+  }
+
+  if (state === 'map') {
+    if (e.key === 'Enter' || e.key === ' ') {
+      onEnterTile(player.x, player.y);
+    }
+    e.preventDefault();
+  }
+});
+
+document.addEventListener('keyup', (e) => { keys[e.key] = false; });
+
+function handleBattleKey(key) {
+  if (battleMenu.phase !== 'player') return;
+
+  if (!battleMenu.subMenu) {
+    const opts = ['attack', 'magic', 'item', 'run'];
+    if (key === 'ArrowUp')    battleMenu.cursor = (battleMenu.cursor - 2 + 4) % 4;
+    if (key === 'ArrowDown')  battleMenu.cursor = (battleMenu.cursor + 2) % 4;
+    if (key === 'ArrowLeft')  battleMenu.cursor = (battleMenu.cursor - 1 + 4) % 4;
+    if (key === 'ArrowRight') battleMenu.cursor = (battleMenu.cursor + 1) % 4;
+    if (key === 'Enter' || key === ' ') {
+      const act = opts[battleMenu.cursor];
+      if (act === 'attack') playerAction('attack');
+      else if (act === 'magic') { battleMenu.subMenu = 'magic'; battleMenu.cursor = 0; }
+      else if (act === 'item')  { battleMenu.subMenu = 'item';  battleMenu.cursor = 0; }
+      else if (act === 'run')   playerAction('run');
+    }
+  } else if (battleMenu.subMenu === 'magic') {
+    const spells = ['hoimi','mera','begirema'];
+    if (key === 'ArrowUp')   battleMenu.cursor = (battleMenu.cursor - 1 + spells.length) % spells.length;
+    if (key === 'ArrowDown') battleMenu.cursor = (battleMenu.cursor + 1) % spells.length;
+    if (key === 'Enter' || key === ' ') playerAction(spells[battleMenu.cursor]);
+    if (key === 'b' || key === 'B' || key === 'Escape') { battleMenu.subMenu = null; battleMenu.cursor = 0; }
+  } else if (battleMenu.subMenu === 'item') {
+    const unique = [...new Set(player.items)];
+    if (key === 'ArrowUp')   battleMenu.cursor = Math.max(0, battleMenu.cursor - 1);
+    if (key === 'ArrowDown') battleMenu.cursor = Math.min(unique.length - 1, battleMenu.cursor + 1);
+    if ((key === 'Enter' || key === ' ') && unique.length > 0) playerAction('item:' + unique[battleMenu.cursor]);
+    if (key === 'b' || key === 'B' || key === 'Escape') { battleMenu.subMenu = null; battleMenu.cursor = 0; }
+  }
+}
+
+// ===== プレイヤー移動 =====
+let lastMoveTime = 0;
+
+function handleMovement(dt) {
+  if (state !== 'map') return;
+  const now = performance.now();
+  if (now - lastMoveTime < MOVE_DELAY) return;
+
+  let dx = 0, dy = 0;
+  if (keys['ArrowUp'])    { dy = -1; player.facing = 0; }
+  else if (keys['ArrowDown'])  { dy =  1; player.facing = 2; }
+  else if (keys['ArrowLeft'])  { dx = -1; player.facing = 3; }
+  else if (keys['ArrowRight']) { dx =  1; player.facing = 1; }
+  else return;
+
+  const nx = player.x + dx, ny = player.y + dy;
+  if (WALKABLE.has(getTile(nx, ny))) {
+    player.x = nx; player.y = ny;
+    lastMoveTime = now;
+    player.animFrame++;
+
+    // エンカウント判定
+    const tile = getTile(nx, ny);
+    const table = AREA_ENEMIES[tile];
+    if (table && Math.random() < 0.12) {
+      const enemyIdx = table[Math.floor(Math.random() * table.length)];
+      startBattle(enemyIdx);
+    }
+  }
+}
+
+// ===== リセット =====
+function resetGame() {
+  player = {
+    x: 2, y: 2, hp: 30, maxHp: 30, mp: 10, maxMp: 10,
+    atk: 8, def: 4, lv: 1, exp: 0, gold: 10, expNext: 10,
+    items: ['やくそう','やくそう'], facing: 2, animFrame: 0,
+  };
+  dungeonDefeated = false;
+  battle = null;
+  state = 'map';
+  document.getElementById('titleScreen').style.display = 'flex';
+}
+
+// ===== バトルアニメ更新 =====
+function updateBattleAnim() {
+  if (battleAnim.active) {
+    battleAnim.frame++;
+    if (battleAnim.frame > 20) battleAnim.active = false;
+  }
+}
+
+// ===== メインループ =====
+let lastTime = 0;
+function gameLoop(ts) {
+  const dt = ts - lastTime; lastTime = ts;
+  handleMovement(dt);
+  updateBattleAnim();
+
+  if (state !== 'battle') drawMap();
+  if (state === 'battle') {
+    if (battle) drawEnemySprite(mCtx, battle.enemy, battleAnim);
+    else { mCtx.fillStyle='#000'; mCtx.fillRect(0,0,SCREEN_W,SCREEN_H); }
+  }
+  drawUI();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// ===== スタート =====
+document.getElementById('startBtn').addEventListener('click', () => {
+  document.getElementById('titleScreen').style.display = 'none';
+  requestAnimationFrame(gameLoop);
+});
+</script>
+</body>
+</html>
